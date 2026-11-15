@@ -27,6 +27,7 @@ class TitanStatusCard extends HTMLElement {
       pv: Array.isArray(config.pv) ? config.pv.slice(0, 4) : [],
       temps: Array.isArray(config.temps) ? config.temps.slice(0, 4) : [],
       footer: Array.isArray(config.footer) ? config.footer.slice(0, 4) : [],
+      controls: Array.isArray(config.controls) ? config.controls.filter(o => o && o.entity).slice(0, 6) : [],
     };
     this._hist = null; this._histAt = 0; this._histBusy = false;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
@@ -66,12 +67,74 @@ class TitanStatusCard extends HTMLElement {
       return `<div class="chip">${ic ? `<ha-icon icon="${this._esc(ic)}"></ha-icon>` : `<b>${this._esc(t.label || "")}</b>`}<span class="tv" data-i="${i}">—</span></div>`;
     }).join("");
     const foot = c.footer.map((f, i) => `<div class="fo"><i>${this._esc(f.label || "")}</i><b class="fv" data-i="${i}">—</b></div>`).join("");
+    const ctlIcon = o => o.icon || (/off_grid|offgrid/i.test(o.entity) ? "mdi:transmission-tower-off" : /led/i.test(o.entity) ? "mdi:led-on" : "mdi:toggle-switch");
+    const ctlBottom = c.controls_position === "bottom";
+    const ctl = c.controls.length ? `<div class="ctl${ctlBottom ? "" : " inhead"}">${c.controls.map((o, i) =>
+      `<button class="cb" data-i="${i}" title="${this._esc(o.label || o.entity)}"><ha-icon icon="${this._esc(ctlIcon(o))}"></ha-icon><span>${this._esc(o.label || "")}</span></button>`).join("")}</div>` : "";
+    const pl = c.planning && typeof c.planning === "object" ? c.planning : null;
+    const plSlots = pl && Array.isArray(pl.slots) ? pl.slots.filter(o => o && o.start && o.end).slice(0, 4) : [];
+    const warnW = pl && Number.isFinite(Number(pl.power_warn)) ? Number(pl.power_warn) : 800;
+    const plHtml = pl ? `<div class="pl">
+        <div class="ph"><button class="pt"><ha-icon icon="mdi:calendar-clock"></ha-icon><span>${this._esc(pl.name || "Planning de recharge")}</span><ha-icon class="pc" icon="mdi:chevron-down"></ha-icon></button>
+          ${pl.enable_entity ? `<button class="pe">—</button>` : ""}</div>
+        <div class="pb" hidden>
+          ${plSlots.map(o => `<div class="ps"><b>${this._esc(o.label || "")}</b>
+            <input class="pi" type="time" data-e="${this._esc(o.start)}"><span>→</span><input class="pi" type="time" data-e="${this._esc(o.end)}"></div>`).join("")}
+          ${pl.end_entity ? `<div class="pr"><i>${this._esc(pl.end_label || "Fin")}</i><select class="pse" data-e="${this._esc(pl.end_entity)}"></select></div>` : ""}
+          ${pl.power_entity ? `<div class="pr"><i>${this._esc(pl.power_label || "Puissance")}</i><div><button class="pm" data-e="${this._esc(pl.power_entity)}" data-d="-1">−</button><em data-e="${this._esc(pl.power_entity)}" data-u="W">—</em><button class="pm" data-e="${this._esc(pl.power_entity)}" data-d="1">+</button></div></div>
+          <div class="pwn" hidden>${pl.power_warn_text ? this._esc(pl.power_warn_text) : `Suivant votre configuration, les limites de sécurité par défaut sont :<br><b>Charge max : ${warnW} W</b> · <b>Décharge max : ${warnW} W</b><br>⚠️ <b>AVERTISSEMENT</b> : modifier ces valeurs peut endommager votre matériel.`}</div>` : ""}
+          ${pl.soc_entity ? `<div class="pr"><i>${this._esc(pl.soc_label || "SOC cible")}</i><div><button class="pm" data-e="${this._esc(pl.soc_entity)}" data-d="-1">−</button><em data-e="${this._esc(pl.soc_entity)}" data-u="%">—</em><button class="pm" data-e="${this._esc(pl.soc_entity)}" data-d="1">+</button></div></div>` : ""}
+        </div></div>` : "";
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block }
         ha-card { display:block;overflow:hidden;border-radius:16px;container-type:inline-size;
           ${dark ? "background:#0f1210;color:#f1f5f2;" : light ? "background:#fbfaf7;color:#111;" : "background:var(--card-background-color);color:var(--primary-text-color);"} }
         .wrap { display:flex;min-height:190px }
+        .ctl { display:flex;gap:8px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
+        .pl { border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
+        .ph { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px }
+        .pt { all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;min-width:0;font-size:.66rem;font-weight:800;
+          letter-spacing:.1em;text-transform:uppercase;color:${tc} }
+        .pt ha-icon { --mdc-icon-size:18px;color:var(--gold);flex:none }
+        .pt span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+        .pt .pc { transition:transform .25s }
+        .pt.open .pc { transform:rotate(180deg) }
+        .pe { all:unset;cursor:pointer;border:1.5px solid var(--gold);border-radius:8px;padding:2px 9px;font-size:.62rem;
+          font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${tc};white-space:nowrap }
+        .pe.on { background:var(--gold);color:#111 }
+        .pe.run { animation:askp 1.2s ease-in-out infinite }
+        .pb { padding:2px 14px 10px;display:flex;flex-direction:column;gap:7px }
+        .pb[hidden] { display:none }
+        .ps { display:flex;align-items:center;gap:8px }
+        .ps b { width:40px;flex:none;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase }
+        .ps span { color:var(--gold);font-weight:700 }
+        .pi { box-sizing:border-box;flex:1;min-width:0;font:inherit;font-size:.82rem;font-weight:600;color:${tc};background:transparent;
+          border:1.5px solid var(--gold);border-radius:8px;padding:3px 6px;color-scheme:${dark ? "dark" : "light"} }
+        .pr { display:flex;align-items:center;justify-content:space-between;gap:8px }
+        .pr i { font-style:normal;font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase }
+        .pse { box-sizing:border-box;min-width:0;max-width:62%;font:inherit;font-size:.78rem;font-weight:600;color:${tc};background:transparent;
+          border:1.5px solid var(--gold);border-radius:8px;padding:3px 6px;color-scheme:${dark ? "dark" : "light"} }
+        .pse option { color:#111;background:#fff }
+        .pr div { display:flex;align-items:center;gap:6px }
+        .pm { all:unset;cursor:pointer;box-sizing:border-box;width:28px;height:24px;display:flex;align-items:center;justify-content:center;
+          border:1.5px solid var(--gold);border-radius:7px;color:var(--gold);font-weight:800;font-size:1rem;line-height:1 }
+        .pwn { font-size:.62rem;line-height:1.45;border:1.5px solid #e5484d;border-radius:8px;padding:5px 8px;
+          background:color-mix(in srgb,#e5484d 12%,transparent);color:${tc} }
+        .pwn[hidden] { display:none }
+        .pr em { font-style:normal;font-weight:700;font-size:.86rem;min-width:64px;text-align:center }
+        .ctl.inhead { padding:0;border:0;flex:1;justify-content:center;gap:5px;min-width:0 }
+        .inhead .cb { flex:none;padding:1px 7px;font-size:.56rem;gap:3px;border-radius:6px }
+        .inhead .cb ha-icon { --mdc-icon-size:13px }
+        .cb { all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;
+          border:1.5px solid var(--gold);border-radius:8px;padding:4px 8px;font-size:.68rem;font-weight:700;letter-spacing:.06em;
+          text-transform:uppercase;white-space:nowrap;color:${tc};transition:background .2s,color .2s }
+        .cb ha-icon { --mdc-icon-size:18px;color:var(--gold) }
+        .cb.on { background:var(--gold);color:#111 }
+        .cb.on ha-icon { color:#111 }
+        .cb.ask { border-style:dashed;animation:askp 1s ease-in-out infinite }
+        .cb.off { opacity:.4;pointer-events:none }
+        @keyframes askp { 50% { opacity:.55 } }
         .tg { display:flex;justify-content:center;height:24px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
         .tb { all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;width:64px;height:24px;color:var(--gold) }
         .tb ha-icon { --mdc-icon-size:22px;transition:transform .25s }
@@ -96,7 +159,7 @@ class TitanStatusCard extends HTMLElement {
         .pw { display:flex;flex-direction:column;align-items:center;font-size:.72rem;font-weight:700 }
         .pw ha-icon { --mdc-icon-size:18px }
         .main { flex:1;min-width:0;padding:12px 14px 10px;display:flex;flex-direction:column;position:relative }
-        .head { display:flex;justify-content:space-between;align-items:baseline }
+        .head { display:flex;justify-content:space-between;align-items:center;gap:6px }
         .name { font-weight:800;letter-spacing:.12em;font-size:.95rem;text-transform:uppercase }
         .brand { font-weight:800;letter-spacing:.16em;font-size:.8rem;color:var(--gold) }
         .row { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;position:relative;z-index:1 }
@@ -124,6 +187,12 @@ class TitanStatusCard extends HTMLElement {
         .fo i { font-style:normal;font-size:.6rem;font-weight:700;border:1.5px solid var(--gold);
           border-radius:5px;padding:1px 4px }
         .fo b { font-weight:700 }
+        @container (max-width: 420px) {
+          .inhead .cb span { display:none }
+          .inhead .cb.ask span { display:inline }
+          .inhead .cb { padding:2px 8px }
+          .inhead .cb ha-icon { --mdc-icon-size:16px }
+        }
         @container (max-width: 380px) {
           .ring { width:78px;height:78px }
           .ring ha-icon { --mdc-icon-size:28px }
@@ -148,7 +217,7 @@ class TitanStatusCard extends HTMLElement {
             <div class="pw"><ha-icon icon="mdi:flash"></ha-icon><span class="pwv">0W</span></div>
           </div>
           <div class="main">
-            <div class="head"><div class="name">${this._esc(c.name)}</div><div class="brand">${this._esc(c.brand)}</div></div>
+            <div class="head"><div class="name">${this._esc(c.name)}</div>${ctlBottom ? "" : ctl}<div class="brand">${this._esc(c.brand)}</div></div>
             <div class="row">
               <div class="left">
                 <div class="soc"><span class="socv">—</span><small>%</small></div>
@@ -169,6 +238,8 @@ class TitanStatusCard extends HTMLElement {
             ${foot ? `<div class="foot">${foot}</div>` : `<div class="foot"></div>`}
           </div>
         </div>
+        ${ctlBottom ? ctl : ""}
+        ${plHtml}
         ${linksCfg.length ? `<div class="tg"><button class="tb" aria-label="Afficher ou masquer le Link"><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>
         <div class="lp" hidden></div>` : ""}
       </ha-card>`;
@@ -180,8 +251,51 @@ class TitanStatusCard extends HTMLElement {
       ring: r.querySelector(".ring"), ringIcon: r.querySelector(".ring ha-icon"), rl: r.querySelector(".rl"),
       mv: r.querySelector(".mv"), dv: r.querySelector(".dv"),
       pv: [...r.querySelectorAll(".pvv")], tv: [...r.querySelectorAll(".tv")], fv: [...r.querySelectorAll(".fv")],
-      sa: r.querySelector(".sa"), sl: r.querySelector(".sl"),
+      sa: r.querySelector(".sa"), sl: r.querySelector(".sl"), cb: [...r.querySelectorAll(".cb")],
     };
+    this._armed = -1;
+    this._e.cb.forEach((b, i) => b.addEventListener("click", () => {
+      const o = c.controls[i];
+      if (!this._hass || !o) return;
+      if (o.confirm && this._armed !== i) {          // 1er appui : demande de confirmation (4 s)
+        this._armed = i; this._paintControls();
+        clearTimeout(this._armT);
+        this._armT = setTimeout(() => { this._armed = -1; this._paintControls(); }, 4000);
+        return;
+      }
+      clearTimeout(this._armT); this._armed = -1;
+      this._hass.callService("homeassistant", "toggle", { entity_id: o.entity });
+      this._paintControls();
+    }));
+    if (pl) {
+      const pb = r.querySelector(".pb"), pt = r.querySelector(".pt");
+      const key = "titan-plan-open:" + (c.name || "");
+      let popen = false;
+      try { popen = localStorage.getItem(key) === "1"; } catch (err) { /* ignore */ }
+      const ap = () => { pb.hidden = !popen; pt.classList.toggle("open", popen); };
+      pt.addEventListener("click", () => {
+        popen = !popen; ap();
+        try { localStorage.setItem(key, popen ? "1" : "0"); } catch (err) { /* ignore */ }
+      });
+      ap();
+      const pe = r.querySelector(".pe");
+      if (pe) pe.addEventListener("click", () => {
+        if (this._hass) this._hass.callService("homeassistant", "toggle", { entity_id: pl.enable_entity });
+      });
+      r.querySelectorAll(".pi").forEach(inp => inp.addEventListener("change", () => {
+        const id = inp.dataset.e, v = inp.value;
+        if (!v || !this._hass) return;
+        const dom = id.split(".")[0];
+        if (dom === "input_datetime") this._hass.callService("input_datetime", "set_datetime", { entity_id: id, time: v + ":00" });
+        else if (dom === "time") this._hass.callService("time", "set_value", { entity_id: id, time: v + ":00" });
+      }));
+      r.querySelectorAll(".pm").forEach(b => b.addEventListener("click", () => this._step(b.dataset.e, Number(b.dataset.d))));
+      r.querySelectorAll(".pse").forEach(sel => sel.addEventListener("change", () => {
+        if (!this._hass || !sel.value) return;
+        const dom = sel.dataset.e.split(".")[0] === "input_select" ? "input_select" : "select";
+        this._hass.callService(dom, "select_option", { entity_id: sel.dataset.e, option: sel.value });
+      }));
+    }
     this._lk = [];
     if (linksCfg.length) {
       const key = "titan-link-open:" + (c.name || "");
@@ -224,8 +338,71 @@ class TitanStatusCard extends HTMLElement {
     return "static";
   }
 
+  _step(id, dir) {
+    const st = this._hass && this._hass.states[id];
+    if (!st) return;
+    const a = st.attributes || {}, cur = parseFloat(st.state);
+    if (!Number.isFinite(cur)) return;
+    const step = Number(a.step) || 1, min = Number.isFinite(Number(a.min)) ? Number(a.min) : 0, max = Number.isFinite(Number(a.max)) ? Number(a.max) : 100;
+    const v = Math.max(min, Math.min(max, Math.round((cur + dir * step) / step) * step));
+    if (v === cur) return;
+    const dom = id.split(".")[0];
+    this._hass.callService(dom === "input_number" ? "input_number" : "number", "set_value", { entity_id: id, value: v });
+  }
+
+  _paintPlan() {
+    const c = this._c, pl = c.planning, r = this.shadowRoot;
+    if (!pl || typeof pl !== "object") return;
+    const pe = r.querySelector(".pe");
+    if (pe) {
+      const on = this._txt(pl.enable_entity) === "on", run = pl.active_entity && this._txt(pl.active_entity) === "on";
+      pe.classList.toggle("on", on);
+      pe.classList.toggle("run", !!(on && run));
+      pe.textContent = on ? (run ? "En cours" : "Actif") : "Désactivé";
+    }
+    r.querySelectorAll(".pi").forEach(inp => {
+      const m = /^(\d\d:\d\d)/.exec(this._txt(inp.dataset.e));
+      if (m && r.activeElement !== inp && inp.value !== m[1]) inp.value = m[1];
+    });
+    r.querySelectorAll(".pse").forEach(sel => {
+      const st = this._hass && this._hass.states[sel.dataset.e];
+      const opts = st && st.attributes && Array.isArray(st.attributes.options) ? st.attributes.options : [];
+      if (opts.join("|") !== [...sel.options].map(o => o.value).join("|")) {
+        sel.innerHTML = opts.map(o => `<option value="${this._esc(o)}">${this._esc(o)}</option>`).join("");
+      }
+      if (st && r.activeElement !== sel && sel.value !== st.state) sel.value = st.state;
+    });
+    const wn = r.querySelector(".pwn");
+    if (wn) {
+      const lim = Number.isFinite(Number(pl.power_warn)) ? Number(pl.power_warn) : 800;
+      const pv = this._num(pl.power_entity);
+      wn.hidden = !(Number.isFinite(pv) && pv > lim);
+    }
+    r.querySelectorAll(".pr em").forEach(em => {
+      const v = this._num(em.dataset.e);
+      em.textContent = Number.isFinite(v) ? this._fmt(v, 0) + " " + em.dataset.u : "—";
+    });
+  }
+
+  _paintControls() {
+    const c = this._c, e = this._e;
+    if (!e || !e.cb) return;
+    c.controls.forEach((o, i) => {
+      const b = e.cb[i]; if (!b) return;
+      const st = this._txt(o.entity), ok = st && st !== "unavailable" && st !== "unknown";
+      const name = o.label || ((this._hass && this._hass.states[o.entity] || { attributes: {} }).attributes.friendly_name) || o.entity;
+      b.classList.toggle("on", st === "on");
+      b.classList.toggle("off", !ok);
+      b.classList.toggle("ask", this._armed === i);
+      b.setAttribute("aria-pressed", st === "on" ? "true" : "false");
+      b.querySelector("span").textContent = this._armed === i ? (c.controls_position === "bottom" ? "Confirmer ?" : "Sûr ?") : name;
+    });
+  }
+
   _update() {
     const c = this._c, e = this._e;
+    this._paintControls();
+    this._paintPlan();
     const soc = this._num(c.soc_entity);
     let p = this._num(c.power_entity);
     if (Number.isFinite(p) && !c.power_charge_positive) p = -p;

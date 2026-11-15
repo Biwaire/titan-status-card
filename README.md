@@ -76,8 +76,58 @@ Seul `soc_entity` est obligatoire.
 | `temps` + `show_temps` | Pastilles de température |
 | `footer` | Jusqu'à 4 compteurs (`label`, `entity`, `unit`, `decimals`) |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
+| `controls` | Boutons dans l'en-tête pour commander des interrupteurs (`switch`, `input_boolean`, `light`) : `entity`, `label`, `icon`, `confirm` |
+| `planning` | Section repliable « Planning de recharge » : interrupteur, plages horaires, puissance et SOC cible (voir ci-dessous) |
 | `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs |
 | `show_ring` | Cercle d'état à droite (désactivé par défaut) |
+
+Boutons de commande (par exemple LED et mode hors réseau) dans l'en-tête de la carte : icônes seules sur écran étroit, avec leur nom sur écran large. `confirm: true` demande un second appui avant d'agir, et `controls_position: bottom` les place en rangée sous la carte :
+
+```yaml
+controls:
+  - {entity: switch.ma_batterie_leds, label: LED}
+  - {entity: switch.ma_batterie_off_grid, label: Off-grid, confirm: true}
+```
+
+### Planning de recharge
+
+Section repliable sous la carte (la flèche « Planning de recharge ») : un interrupteur Activé / Désactivé / En cours, des plages horaires modifiables, la puissance et le SOC cible avec des boutons + et −.
+
+**La carte ne fait que lire et écrire des entités : la recharge elle-même est pilotée par des automatisations.** Elles sont fournies dans [`planning/planning_recharge.yaml`](planning/planning_recharge.yaml) (batteries Izypower Titan avec l'intégration [izypower_titan](https://github.com/khirale/izypower_titan)). Le planning est **manuel** : tu l'actives toi-même. À l'heure de début, la batterie passe en RealTime, règle la puissance et le SOC cible, puis lance la charge. À la fin (heure de fin ou SOC atteint), l'action choisie s'exécute : **Standby** (par défaut : la charge s'arrête et la Titan reste en RealTime) ou **Self-consumed** (retour à l'autoconsommation). Le planning se coupe ensuite : il faut le réactiver à la main.
+
+> Après un Standby, la batterie ne se recharge plus avec le solaire tant que tu n'as pas choisi un autre mode. Choisis « Self-consumed » comme action de fin si tu veux revenir à l'autoconsommation automatiquement.
+
+> ⚠️ La recharge se fait sur le réseau. Teste d'abord à faible puissance (500 W) en surveillant la batterie. Utilisation à tes risques.
+>
+> ⚠️ **AVERTISSEMENT** : suivant ta configuration, les limites de sécurité par défaut sont **charge max 800 W** et **décharge max 800 W**. Modifier ces valeurs peut endommager ton matériel. La carte affiche cet avertissement dès que la puissance de recharge dépasse 800 W (réglable avec `power_warn`, personnalisable avec `power_warn_text`).
+
+Installation du planning :
+
+1. Dans `configuration.yaml`, vérifie que les paquets sont activés :
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+2. Copie `planning/planning_recharge.yaml` dans `/config/packages/`.
+3. Ouvre le fichier et modifie **uniquement le bloc « RÉGLAGES À ADAPTER »** (4 lignes, dans la première automatisation) : capteur de SOC, capteur `working_mode` de ta Titan principale, puissance AC totale des batteries (positive en charge) et service de notification. Rien d’autre à changer. Vérifie que les entités `number.cluster_*` et `button.cluster_*` existent chez toi.
+4. Redémarre Home Assistant. Règle les heures, la puissance et le SOC cible dans les entrées créées.
+5. Ajoute la section à la carte de ta Titan principale (une seule carte, car le planning commande tout le cluster) :
+
+```yaml
+planning:
+  name: Planning de recharge          # facultatif
+  enable_entity: input_boolean.planning_recharge_actif
+  active_entity: input_boolean.planning_recharge_en_cours   # facultatif : affiche « En cours »
+  slots:                               # jusqu'à 4 plages
+    - {label: Nuit, start: input_datetime.planning_recharge_debut_nuit, end: input_datetime.planning_recharge_fin_nuit}
+    - {label: Jour, start: input_datetime.planning_recharge_debut_jour, end: input_datetime.planning_recharge_fin_jour}
+  power_entity: input_number.planning_recharge_puissance
+  soc_entity: input_number.planning_recharge_soc_cible
+  power_warn: 800                      # facultatif : seuil (W) de l'avertissement, 800 par défaut
+  end_entity: input_select.planning_recharge_fin   # facultatif : choix de l'action de fin
+```
+
+La section n'apparaît que si `planning` est présent : sans cette option, la carte est inchangée. Les heures peuvent être des `input_datetime` (heure seule) ou des entités `time` ; la puissance et le SOC, des `input_number` ou `number`.
 
 `link` accepte aussi une **liste** pour plusieurs modules Link sous la même carte :
 
