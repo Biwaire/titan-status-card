@@ -58,6 +58,7 @@ class TitanStatusCard extends HTMLElement {
 
   _build() {
     const c = this._c, dark = c.theme === "black", light = c.theme !== "auto" && !dark;
+    const linksCfg = (Array.isArray(c.link) ? c.link : c.link ? [c.link] : []).filter(o => o && typeof o === "object");
     const tc = dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)";
     const pv = c.pv.map((p, i) => `<div class="pv"><ha-icon icon="mdi:solar-panel-large"></ha-icon><span class="pvv" data-i="${i}">—</span></div>`).join("");
     const temps = c.temps.map((t, i) => {
@@ -168,7 +169,7 @@ class TitanStatusCard extends HTMLElement {
             ${foot ? `<div class="foot">${foot}</div>` : `<div class="foot"></div>`}
           </div>
         </div>
-        ${c.link ? `<div class="tg"><button class="tb" aria-label="Afficher ou masquer le Link"><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>
+        ${linksCfg.length ? `<div class="tg"><button class="tb" aria-label="Afficher ou masquer le Link"><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>
         <div class="lp" hidden></div>` : ""}
       </ha-card>`;
     const r = this.shadowRoot;
@@ -181,17 +182,19 @@ class TitanStatusCard extends HTMLElement {
       pv: [...r.querySelectorAll(".pvv")], tv: [...r.querySelectorAll(".tv")], fv: [...r.querySelectorAll(".fv")],
       sa: r.querySelector(".sa"), sl: r.querySelector(".sl"),
     };
-    this._lk = null;
-    if (c.link) {
+    this._lk = [];
+    if (linksCfg.length) {
       const key = "titan-link-open:" + (c.name || "");
       let open = false;
       try { open = localStorage.getItem(key) === "1"; } catch (err) { /* ignore */ }
       const lp = r.querySelector(".lp"), tb = r.querySelector(".tb");
-      const lk = document.createElement("titan-link-card");
-      lk.setConfig({ theme: c.theme, gold: c.gold, state_entity: c.state_entity, power_entity: c.power_entity,
-        power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors,
-        ...c.link, brand: "", embedded: true });
-      lp.append(lk); this._lk = lk;
+      linksCfg.forEach(lc => {
+        const lk = document.createElement("titan-link-card");
+        lk.setConfig({ theme: c.theme, gold: c.gold, state_entity: c.state_entity, power_entity: c.power_entity,
+          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors,
+          ...lc, brand: "", embedded: true });
+        lp.append(lk); this._lk.push(lk);
+      });
       const apply = () => { lp.hidden = !open; tb.classList.toggle("open", open); };
       this._applyLink = o => { open = o; apply(); };
       tb.addEventListener("click", () => {
@@ -289,8 +292,8 @@ class TitanStatusCard extends HTMLElement {
         ? this._fmt(v, x.decimals !== undefined ? x.decimals : 2) + (u ? " " + u : "") : "—";
     });
 
-    if (this._lk) this._lk.hass = this._hass;
-    if (this._lk && c.link_toggle_entity && this._hass.states[c.link_toggle_entity]) {
+    (this._lk || []).forEach(l => { l.hass = this._hass; });
+    if (this._lk && this._lk.length && c.link_toggle_entity && this._hass.states[c.link_toggle_entity]) {
       this._applyLink(this._hass.states[c.link_toggle_entity].state === "on");
     }
     this._loadHistory();

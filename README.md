@@ -6,6 +6,18 @@ puissance, courbe, compteurs), avec un module **Link** repliable. Deux styles : 
 > Projet communautaire, non affilié à un fabricant. Aucune marque n'est affichée par défaut :
 > le texte en haut à droite se règle avec l'option `brand`.
 
+## Aperçu
+
+Carte repliée, puis avec le module Link déplié (flèche sous la carte), en blanc et doré ou en noir et vert :
+
+![Carte repliée](images/apercu-replie.png)
+
+![Carte avec un Link](images/apercu-link.png)
+
+Plusieurs modules Link peuvent être empilés (ici 5) :
+
+![Carte avec 5 Link](images/apercu-5-links.png)
+
 ## Installation
 
 ### Avec HACS (dépôt personnalisé)
@@ -66,6 +78,14 @@ Seul `soc_entity` est obligatoire.
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
 | `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs |
 | `show_ring` | Cercle d'état à droite (désactivé par défaut) |
+
+`link` accepte aussi une **liste** pour plusieurs modules Link sous la même carte :
+
+```yaml
+link:
+  - {name: Link 1, soc_entity: sensor.link1_soc, temp_entity: sensor.link1_temperature, cycles_entity: sensor.link1_cycles}
+  - {name: Link 2, soc_entity: sensor.link2_soc, temp_entity: sensor.link2_temperature, cycles_entity: sensor.link2_cycles}
+```
 
 Le Link se déplie avec la flèche sous la carte ; le choix est retenu sur chaque appareil.
 La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`).
