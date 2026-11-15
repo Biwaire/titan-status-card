@@ -10,13 +10,13 @@ puissance, courbe, compteurs), avec un module **Link** repliable. Deux styles : 
 
 Carte repliée, puis avec le module Link déplié (flèche sous la carte), en blanc et doré ou en noir et vert :
 
-![Carte repliée](images/apercu-replie.png)
+![Carte repliée](images%20demo/apercu-replie.png)
 
-![Carte avec un Link](images/apercu-link.png)
+![Carte avec un Link](images%20demo/apercu-link.png)
 
 Plusieurs modules Link peuvent être empilés (ici 5) :
 
-![Carte avec 5 Link](images/apercu-5-links.png)
+![Carte avec 5 Link](images%20demo/apercu-5-links.png)
 
 ## Installation
 
