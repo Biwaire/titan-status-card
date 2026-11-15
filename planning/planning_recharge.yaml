@@ -1,0 +1,419 @@
+###############################################################################
+# PLANNING DE RECHARGE FORCÉE (RÉSEAU) — batteries Izypower Titan (cluster)
+# Paquet Home Assistant à utiliser avec la section « planning » de titan-status-card.
+#
+# Principe : pendant une plage horaire (Nuit ou Jour), si le planning est activé
+# et que le SOC est sous la cible, la batterie passe en RealTime, charge à la
+# puissance choisie jusqu'au SOC cible. À la fin (heure de fin ou SOC atteint),
+# l'action choisie dans « Planning recharge - action de fin » s'exécute :
+#   - Standby        : la charge s'arrête (bouton Standby) et la Titan reste en
+#                      RealTime (réglage par défaut) ;
+#   - Self-consumed  : retour au mode autoconsommation.
+# Le planning est MANUEL : tu l'actives toi-même, il se coupe à la fin.
+#
+# ⚠️ Après un Standby, la batterie ne se recharge plus avec le solaire tant que tu
+#    n'as pas choisi un autre mode (par exemple Self-consumed) : pense à le faire,
+#    ou choisis « Self-consumed » comme action de fin.
+#
+# ⚠️ La recharge se fait sur le réseau (elle consomme et coûte). Teste d'abord
+#    avec une petite puissance (par exemple 500 W) en surveillant la batterie.
+#
+# ⚠️ AVERTISSEMENT : suivant votre configuration, les limites de sécurité par défaut
+#    sont : charge max 800 W, décharge max 800 W. Dépasser 800 W pour la puissance de
+#    recharge, ou modifier ces valeurs, peut endommager votre matériel.
+#
+# À ADAPTER : un seul bloc, repérable à « RÉGLAGES À ADAPTER », dans la première
+# automatisation ci-dessous (4 lignes : SOC, working mode, puissance totale,
+# notification). Rien d'autre à modifier dans ce fichier.
+#
+# Sur un cluster, la Titan principale peut ne pas charger quand la secondaire charge :
+# c'est pourquoi la charge est mesurée sur la puissance TOTALE, pas sur une seule Titan.
+# Les entités number.cluster_* et button.cluster_* viennent de l'intégration
+# izypower_titan (https://github.com/khirale/izypower_titan) : vérifie qu'elles
+# existent chez toi.
+###############################################################################
+
+automation:
+
+  #---------------------------------------------------------------------------
+  # DÉBUT : lancement de la recharge forcée
+  #---------------------------------------------------------------------------
+  - id: planning_recharge_debut
+    alias: "Planning recharge - début"
+    mode: single
+
+    # ===========================================================================
+    # RÉGLAGES À ADAPTER : seul endroit du fichier à modifier (4 lignes)
+    # ===========================================================================
+    trigger_variables: &reglages
+      # SOC (%) de ta batterie maître (Titan principale). Dans un cluster, les
+      # batteries restent au même niveau à 1 % près : celui de la maître suffit.
+      soc_sensor: sensor.izypower_titan_titan_pile_average
+      # Capteur « working mode » de ta Titan principale
+      mode_sensor: sensor.izypower_titan_titan_working_mode
+      # Puissance AC TOTALE des batteries, en W, POSITIVE EN CHARGE
+      # (somme des « ac_input_and_output » de toutes tes Titan ; une seule Titan :
+      # sensor.izypower_titan_titan_ac_input_and_output)
+      power_sensor: sensor.puissance_ac_cumulee_batteries
+      # Service de notification (persistent_notification.create convient aussi)
+      notify_service: notify.notify
+    # ===========================================================================
+    triggers:
+      - trigger: time
+        at:
+          - input_datetime.planning_recharge_debut_nuit
+          - input_datetime.planning_recharge_debut_jour
+        id: heure_debut
+      # Planning activé en cours de plage : on démarre tout de suite
+      - trigger: state
+        entity_id: input_boolean.planning_recharge_actif
+        from: "off"
+        to: "on"
+        id: planning_on
+      # Redémarrage de HA pendant la plage
+      - trigger: homeassistant
+        event: start
+        id: demarrage
+    variables:
+      <<: *reglages
+      soc: "{{ states(soc_sensor) | float(100) }}"
+      soc_cible: >
+        {{ (states('input_number.planning_recharge_soc_cible') | float(0)) | round(0) | int }}
+      puissance: >
+        {{ (((states('input_number.planning_recharge_puissance') | float(0)) / 50) | round(0) * 50) | int }}
+      dans_plage: >
+        {% set n = now().strftime('%H:%M:%S') %}
+        {% set nd = states('input_datetime.planning_recharge_debut_nuit') %}
+        {% set nf = states('input_datetime.planning_recharge_fin_nuit') %}
+        {% set jd = states('input_datetime.planning_recharge_debut_jour') %}
+        {% set jf = states('input_datetime.planning_recharge_fin_jour') %}
+        {% set nuit = (nd <= n < nf) if nd < nf else (n >= nd or n < nf) %}
+        {% set jour = (jd <= n < jf) if jd < jf else (n >= jd or n < jf) %}
+        {{ nuit or jour }}
+    conditions:
+      - condition: state
+        entity_id: input_boolean.planning_recharge_actif
+        state: "on"
+      - condition: template
+        value_template: "{{ dans_plage }}"
+      # Puissance réglée (>= 50 W) et SOC cible pas encore atteint
+      - condition: template
+        value_template: "{{ puissance >= 50 and soc_cible > 0 and soc < soc_cible }}"
+      # Déjà en charge forcée : rien à faire
+      - condition: template
+        value_template: >
+          {{ not (is_state(mode_sensor, 'RealTime')
+                  and states(power_sensor) | float(0) > 100) }}
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.planning_recharge_en_cours
+      # 1. Puissance de charge choisie
+      - action: number.set_value
+        target:
+          entity_id: number.cluster_max_charge_power
+        data:
+          value: "{{ puissance }}"
+      # 2. SOC max choisi
+      - action: number.set_value
+        target:
+          entity_id: number.cluster_charge_soc_max
+        data:
+          value: "{{ soc_cible }}"
+      - delay: "00:00:03"
+      # 3. Passage en RealTime
+      - action: button.press
+        target:
+          entity_id: button.cluster_realtime_mode
+      - wait_template: "{{ is_state(mode_sensor, 'RealTime') }}"
+        timeout: "00:00:30"
+        continue_on_timeout: true
+      - delay: "00:00:03"
+      # 4. Start charge
+      - action: button.press
+        target:
+          entity_id: button.cluster_start_charge
+      - wait_template: "{{ states(power_sensor) | float(0) > 100 }}"
+        timeout: "00:02:00"
+        continue_on_timeout: true
+      - if:
+          - condition: template
+            value_template: "{{ wait.completed }}"
+        then:
+          - action: "{{ notify_service }}"
+            data:
+              title: "🔋 Recharge batterie"
+              message: >
+                Recharge forcée démarrée : {{ soc | round(0) }} % → {{ soc_cible }} %
+                à {{ puissance }} W.
+        else:
+          - action: "{{ notify_service }}"
+            data:
+              title: "⚠️ Recharge batterie"
+              message: >
+                Les batteries ne chargent pas 2 min après le Start
+                (mode : {{ states(mode_sensor) }},
+                puissance totale : {{ states(power_sensor) }} W).
+                La recharge sera arrêtée dans 10 min si rien ne change.
+
+  #---------------------------------------------------------------------------
+  # FIN : action choisie (Standby / Self-consumed / RealTime)
+  #---------------------------------------------------------------------------
+  - id: planning_recharge_fin
+    alias: "Planning recharge - fin"
+    mode: single
+    trigger_variables: *reglages
+    triggers:
+      # SOC cible atteint
+      - trigger: template
+        id: soc_atteint
+        value_template: >
+          {{ is_state('input_boolean.planning_recharge_en_cours', 'on')
+             and has_value(soc_sensor)
+             and states(soc_sensor) | float(0)
+                 >= states('input_number.planning_recharge_soc_cible') | float(100) }}
+        for: "00:01:00"
+      # Fin de la plage horaire
+      - trigger: time
+        at:
+          - input_datetime.planning_recharge_fin_nuit
+          - input_datetime.planning_recharge_fin_jour
+        id: fin_plage
+      # La batterie a arrêté de charger d'elle-même
+      - trigger: template
+        id: charge_arretee
+        value_template: >
+          {{ is_state('input_boolean.planning_recharge_en_cours', 'on')
+             and is_state(mode_sensor, 'RealTime')
+             and states(power_sensor) | float(0) < 50 }}
+        for: "00:10:00"
+      # La Titan a quitté le RealTime pendant la recharge
+      - trigger: template
+        id: mode_change
+        value_template: >
+          {{ is_state('input_boolean.planning_recharge_en_cours', 'on')
+             and not is_state(mode_sensor, 'RealTime') }}
+        for: "00:05:00"
+      # Planning coupé en pleine recharge
+      - trigger: state
+        entity_id: input_boolean.planning_recharge_actif
+        to: "off"
+        id: planning_off
+      # Redémarrage de HA
+      - trigger: homeassistant
+        event: start
+        id: demarrage
+    variables:
+      <<: *reglages
+      fin: "{{ states('input_select.planning_recharge_fin') }}"
+      raison: >
+        {{ {'soc_atteint': 'SOC cible atteint',
+            'fin_plage': 'fin de la plage horaire',
+            'charge_arretee': 'la batterie ne chargeait plus depuis 10 min',
+            'mode_change': 'la Titan avait quitté le mode RealTime',
+            'planning_off': 'planning désactivé',
+            'demarrage': 'redémarrage de Home Assistant'}[trigger.id] }}
+    conditions:
+      # Agit seulement si une recharge du planning était en cours
+      - condition: state
+        entity_id: input_boolean.planning_recharge_en_cours
+        state: "on"
+    actions:
+      - choose:
+          # Self-consumed : retour au mode autoconsommation (2 essais)
+          - conditions:
+              - condition: template
+                value_template: "{{ fin == 'Self-consumed' }}"
+            sequence:
+              # Coupure manuelle : Standby d'abord pour arrêter la charge net
+              - if:
+                  - condition: trigger
+                    id: planning_off
+                then:
+                  - action: button.press
+                    target:
+                      entity_id: button.cluster_standby
+                  - wait_template: "{{ states(power_sensor) | float(0) < 50 }}"
+                    timeout: "00:00:30"
+                    continue_on_timeout: true
+                  - delay: "00:00:03"
+              - repeat:
+                  sequence:
+                    - action: button.press
+                      target:
+                        entity_id: button.cluster_self_consumed_mode
+                    - wait_template: "{{ is_state(mode_sensor, 'Self-consumed') }}"
+                      timeout: "00:00:30"
+                      continue_on_timeout: true
+                  until:
+                    - condition: template
+                      value_template: >
+                        {{ is_state(mode_sensor, 'Self-consumed')
+                           or repeat.index >= 2 }}
+              # Limite de charge rendue UNIQUEMENT une fois revenu en Self-consumed
+              # (la relever en RealTime relancerait la charge à fond)
+              - if:
+                  - condition: template
+                    value_template: "{{ is_state(mode_sensor, 'Self-consumed') }}"
+                then:
+                  - action: number.set_value
+                    target:
+                      entity_id: number.cluster_max_charge_power
+                    data:
+                      value: "{{ state_attr('number.cluster_max_charge_power', 'max') | float(4800) }}"
+        # Par défaut : Standby. La limite de charge n'est PAS relevée ici : elle reste
+        # à la puissance du planning, et ne sera rendue qu'au retour en Self-consumed
+        # (automatisation « limite de charge rendue » plus bas).
+        default:
+          - action: button.press
+            target:
+              entity_id: button.cluster_standby
+          - wait_template: "{{ states(power_sensor) | float(0) < 50 }}"
+            timeout: "00:01:00"
+            continue_on_timeout: true
+          # Standby répété une fois si la charge continue
+          - if:
+              - condition: template
+                value_template: "{{ states(power_sensor) | float(0) >= 50 }}"
+            then:
+              - action: button.press
+                target:
+                  entity_id: button.cluster_standby
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.planning_recharge_en_cours
+      # SOC cible atteint ou fin de plage : le planning se coupe (à réactiver à la main)
+      - if:
+          - condition: trigger
+            id:
+              - soc_atteint
+              - fin_plage
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.planning_recharge_actif
+      - if:
+          - condition: template
+            value_template: >
+              {{ fin == 'Self-consumed'
+                 and not is_state(mode_sensor, 'Self-consumed') }}
+        then:
+          - action: "{{ notify_service }}"
+            data:
+              title: "🚨 Titan bloquée"
+              message: >
+                Impossible de repasser en Self-consumed ({{ raison }}).
+                Mode actuel : {{ states(mode_sensor) }}.
+                Vérifie la batterie !
+        else:
+          - action: "{{ notify_service }}"
+            data:
+              title: "🔋 Recharge batterie terminée"
+              message: >
+                Fin de recharge ({{ raison }}). Action : {{ fin }}.
+                SOC : {{ states(soc_sensor) | float(0) | round(0) }} %.
+
+  #---------------------------------------------------------------------------
+  # LIMITE DE CHARGE RENDUE : au retour en Self-consumed (par exemple après un Standby
+  # puis un changement de mode à la main), la limite de charge réglée par le planning
+  # est remise au maximum, sinon la charge solaire resterait bridée.
+  # Ne touche à rien si la limite a été réglée par autre chose.
+  #---------------------------------------------------------------------------
+  - id: planning_recharge_limite_rendue
+    alias: "Planning recharge - limite de charge rendue"
+    mode: single
+    trigger_variables: *reglages
+    triggers:
+      - trigger: template
+        value_template: "{{ is_state(mode_sensor, 'Self-consumed') }}"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.planning_recharge_en_cours
+        state: "off"
+      - condition: template
+        value_template: >
+          {{ (states('number.cluster_max_charge_power') | float(0))
+               == (states('input_number.planning_recharge_puissance') | float(0))
+             and (states('number.cluster_max_charge_power') | float(0))
+               < (state_attr('number.cluster_max_charge_power', 'max') | float(4800)) }}
+    actions:
+      - action: number.set_value
+        target:
+          entity_id: number.cluster_max_charge_power
+        data:
+          value: "{{ state_attr('number.cluster_max_charge_power', 'max') | float(4800) }}"
+
+  #---------------------------------------------------------------------------
+  # FIN DE PLAGE : le planning se coupe toujours à l'heure de fin
+  # (même si aucune charge n'a eu lieu, par exemple SOC déjà au-dessus de la cible)
+  #---------------------------------------------------------------------------
+  - id: planning_recharge_arret_fin
+    alias: "Planning recharge - arrêt fin de plage"
+    mode: single
+    triggers:
+      - trigger: time
+        at:
+          - input_datetime.planning_recharge_fin_nuit
+          - input_datetime.planning_recharge_fin_jour
+    conditions:
+      - condition: state
+        entity_id: input_boolean.planning_recharge_actif
+        state: "on"
+    actions:
+      # Délai d'1 min : l'action de fin se termine d'abord
+      - delay: "00:01:00"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.planning_recharge_actif
+input_boolean:
+  planning_recharge_actif:
+    name: "Planning recharge - actif"
+    icon: mdi:battery-clock
+  planning_recharge_en_cours:
+    name: "Planning recharge - recharge en cours (interne, ne pas toucher)"
+    icon: mdi:battery-charging-high
+
+input_select:
+  planning_recharge_fin:
+    name: "Planning recharge - action de fin"
+    icon: mdi:flag-checkered
+    options:
+      - "Standby"
+      - "Self-consumed"
+
+input_datetime:
+  planning_recharge_debut_nuit:
+    name: "Planning recharge - début nuit"
+    has_date: false
+    has_time: true
+  planning_recharge_fin_nuit:
+    name: "Planning recharge - fin nuit"
+    has_date: false
+    has_time: true
+  planning_recharge_debut_jour:
+    name: "Planning recharge - début jour"
+    has_date: false
+    has_time: true
+  planning_recharge_fin_jour:
+    name: "Planning recharge - fin jour"
+    has_date: false
+    has_time: true
+
+input_number:
+  planning_recharge_puissance:
+    name: "Planning recharge - puissance"
+    min: 50
+    max: 4800
+    step: 50
+    unit_of_measurement: "W"
+    mode: box
+    icon: mdi:flash
+  planning_recharge_soc_cible:
+    name: "Planning recharge - SOC cible"
+    min: 10
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:battery-arrow-up
+
