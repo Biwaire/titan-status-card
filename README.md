@@ -71,6 +71,8 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `name`, `brand` | Nom de la carte, texte en haut à droite (vide par défaut) |
 | `palette` | `gold` (défaut) ou `green` |
 | `background` | Couleur de fond de la carte (ex. `"#EDE8D0"` pour un beige). Sans cette option, le fond d'origine est conservé |
+| `text_color` | Couleur des textes (ex. `"#333333"`). Sans cette option, la couleur d'origine est conservée |
+| `border_color` | Couleur des cadres : pastilles, cercle d'état, boutons (ex. `"#39ff14"`). Sans cette option, la couleur d'accent est utilisée |
 | `gold` / `green` | Couleur d'accent de chaque style |
 | `soc_entity` | SOC de la batterie (obligatoire) |
 | `power_entity`, `power_charge_positive` | Puissance et son signe (positif = charge par défaut) |
@@ -83,8 +85,10 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
 | `controls` | Boutons dans l'en-tête pour commander des interrupteurs (`switch`, `input_boolean`, `light`) : `entity`, `label`, `icon`, `confirm` |
 | `planning` | Section repliable « Planning de recharge » : interrupteur, plages horaires, puissance et SOC cible (voir ci-dessous) |
-| `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs |
-| `show_ring` | Cercle d'état à droite (désactivé par défaut) |
+| `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs. `bar_colors.full` (optionnel) règle la couleur de la barre quand la batterie est pleine (par défaut, celle de `charge`) |
+| `show_ring` | Cercle d'état à droite (désactivé par défaut), dynamique : sa taille s'adapte à la largeur de la carte (PC, tablette, téléphone) et il ne déborde plus sur la courbe |
+| `show_eta` | `false` masque l'horloge / heure estimée en haut à gauche (affichée par défaut) |
+| `show_label` | `false` masque le texte vertical à gauche (VEILLE, CHARGE…). Affiché par défaut |
 
 Boutons de commande (par exemple LED et mode hors réseau) dans l'en-tête de la carte : icônes seules sur écran étroit, avec leur nom sur écran large. `confirm: true` demande un second appui avant d'agir, et `controls_position: bottom` les place en rangée sous la carte :
 

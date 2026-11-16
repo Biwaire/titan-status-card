@@ -2,11 +2,12 @@
 // ignore les valeurs vides ou false d'un réglage (l'éditeur Home Assistant en laisse parfois)
 const clean = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v));
 /* Fond et couleur du texte de la carte ; l'option background impose la couleur de fond */
+const tscCol = v => (typeof v === "string" ? v.replace(/[;{}<>]/g, "").trim() : "");
 function tscBg(c, dark, light) {
-  const txt = dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)";
+  const txt = tscCol(c.text_color) || (dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)");
   const def = dark ? "#0f1210" : light ? "#fbfaf7" : "var(--card-background-color)";
   const bg = typeof c.background === "string" && c.background.trim() ? c.background.replace(/[;{}<>]/g, "").trim() : def;
-  return "background:" + bg + ";color:" + txt + ";";
+  return "background:" + bg + ";color:" + txt + ";" + (tscCol(c.border_color) ? "--bd:" + tscCol(c.border_color) + ";" : "");
 }
 
 class TitanStatusCard extends HTMLElement {
@@ -68,7 +69,7 @@ class TitanStatusCard extends HTMLElement {
   _build() {
     const c = this._c, dark = c.theme === "black", light = c.theme !== "auto" && !dark;
     const linksCfg = (Array.isArray(c.link) ? c.link : c.link ? [c.link] : []).filter(o => o && typeof o === "object");
-    const tc = dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)";
+    const tc = tscCol(c.text_color) || (dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)");
     const pv = c.pv.map((p, i) => `<div class="pv"><ha-icon icon="mdi:solar-panel-large"></ha-icon><span class="pvv" data-i="${i}">—</span></div>`).join("");
     const temps = c.temps.map((t, i) => {
       const ic = t.icon || (/🌡/.test(t.label || "") ? "mdi:thermometer" : "");
@@ -100,6 +101,7 @@ class TitanStatusCard extends HTMLElement {
         ha-card { display:block;overflow:hidden;border-radius:16px;container-type:inline-size;
           ${tscBg(c, dark, light)} }
         .wrap { display:flex;min-height:190px }
+        .ringed .wrap { min-height:204px }
         .ctl { display:flex;gap:8px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
         .pl { border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
         .pl.top { border-top:0;border-bottom:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
@@ -112,7 +114,7 @@ class TitanStatusCard extends HTMLElement {
         .pt.open .pc { transform:rotate(180deg) }
         .pl.top .pt .pc { transform:rotate(180deg) }
         .pl.top .pt.open .pc { transform:none }
-        .pe { all:unset;cursor:pointer;border:1.5px solid var(--gold);border-radius:8px;padding:2px 9px;font-size:.62rem;
+        .pe { all:unset;cursor:pointer;border:1.5px solid var(--bd,var(--gold));border-radius:8px;padding:2px 9px;font-size:.62rem;
           font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${tc};white-space:nowrap }
         .pe.on { background:var(--gold);color:#111 }
         .pe.run { animation:askp 1.2s ease-in-out infinite }
@@ -122,15 +124,15 @@ class TitanStatusCard extends HTMLElement {
         .ps b { width:40px;flex:none;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase }
         .ps span { color:var(--gold);font-weight:700 }
         .pi { box-sizing:border-box;flex:1;min-width:0;font:inherit;font-size:.82rem;font-weight:600;color:${tc};background:transparent;
-          border:1.5px solid var(--gold);border-radius:8px;padding:3px 6px;color-scheme:${dark ? "dark" : "light"} }
+          border:1.5px solid var(--bd,var(--gold));border-radius:8px;padding:3px 6px;color-scheme:${dark ? "dark" : "light"} }
         .pr { display:flex;align-items:center;justify-content:space-between;gap:8px }
         .pr i { font-style:normal;font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase }
         .pse { box-sizing:border-box;min-width:0;max-width:62%;font:inherit;font-size:.78rem;font-weight:600;color:${tc};background:transparent;
-          border:1.5px solid var(--gold);border-radius:8px;padding:3px 6px;color-scheme:${dark ? "dark" : "light"} }
+          border:1.5px solid var(--bd,var(--gold));border-radius:8px;padding:3px 6px;color-scheme:${dark ? "dark" : "light"} }
         .pse option { color:#111;background:#fff }
         .pr div { display:flex;align-items:center;gap:6px }
         .pm { all:unset;cursor:pointer;box-sizing:border-box;width:28px;height:24px;display:flex;align-items:center;justify-content:center;
-          border:1.5px solid var(--gold);border-radius:7px;color:var(--gold);font-weight:800;font-size:1rem;line-height:1 }
+          border:1.5px solid var(--bd,var(--gold));border-radius:7px;color:var(--gold);font-weight:800;font-size:1rem;line-height:1 }
         .pwn { font-size:.62rem;line-height:1.45;border:1.5px solid #e5484d;border-radius:8px;padding:5px 8px;
           background:color-mix(in srgb,#e5484d 12%,transparent);color:${tc} }
         .pwn[hidden] { display:none }
@@ -139,7 +141,7 @@ class TitanStatusCard extends HTMLElement {
         .inhead .cb { flex:none;padding:1px 7px;font-size:.56rem;gap:3px;border-radius:6px }
         .inhead .cb ha-icon { --mdc-icon-size:13px }
         .cb { all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;
-          border:1.5px solid var(--gold);border-radius:8px;padding:4px 8px;font-size:.68rem;font-weight:700;letter-spacing:.06em;
+          border:1.5px solid var(--bd,var(--gold));border-radius:8px;padding:4px 8px;font-size:.68rem;font-weight:700;letter-spacing:.06em;
           text-transform:uppercase;white-space:nowrap;color:${tc};transition:background .2s,color .2s }
         .cb ha-icon { --mdc-icon-size:18px;color:var(--gold) }
         .cb.on { background:var(--gold);color:#111 }
@@ -182,21 +184,21 @@ class TitanStatusCard extends HTMLElement {
         .pvs { display:flex;gap:10px;margin-top:10px }
         .pv { display:flex;flex-direction:column;align-items:center;font-size:.62rem }
         .pv ha-icon { --mdc-icon-size:26px }
-        .ring { width:104px;height:104px;flex:none;border-radius:50%;border:3px solid var(--gold);
+        .ring { --rs:clamp(42px,11cqw,60px);width:var(--rs);height:var(--rs);flex:none;border-radius:50%;border:3px solid var(--bd,var(--gold));
           display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-          box-shadow:0 0 18px color-mix(in srgb,var(--gold) 35%,transparent);color:var(--gold) }
+          box-shadow:0 0 10px color-mix(in srgb,var(--gold) 30%,transparent);color:var(--gold) }
         .ring span { color:${tc} }
-        .ring ha-icon { --mdc-icon-size:38px }
-        .ring span { font-size:.72rem;font-weight:700;letter-spacing:.06em }
+        .ring ha-icon { --mdc-icon-size:calc(var(--rs)*.4) }
+        .ring span { font-size:calc(var(--rs)*.2);font-weight:700;letter-spacing:.06em }
         .chips { display:flex;flex-direction:column;gap:6px;align-items:stretch }
-        .chip { border:1.5px solid var(--gold);color:${tc};border-radius:8px;display:flex;align-items:center;justify-content:center;gap:3px;
+        .chip { border:1.5px solid var(--bd,var(--gold));color:${tc};border-radius:8px;display:flex;align-items:center;justify-content:center;gap:3px;
           padding:3px 8px;font-size:.72rem;font-weight:600;white-space:nowrap }
         .chip ha-icon { --mdc-icon-size:16px;color:var(--gold) }
         .chip.mode { font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:2px 8px }
         svg.spark { position:absolute;left:0;right:0;bottom:34px;width:100%;height:46px;z-index:0;pointer-events:none }
         .foot { display:flex;justify-content:space-between;gap:6px;margin-top:auto;position:relative;z-index:1;padding-top:52px }
         .fo { display:flex;align-items:center;gap:5px;font-size:.9rem;white-space:nowrap }
-        .fo i { font-style:normal;font-size:.6rem;font-weight:700;border:1.5px solid var(--gold);
+        .fo i { font-style:normal;font-size:.6rem;font-weight:700;border:1.5px solid var(--bd,var(--gold));
           border-radius:5px;padding:1px 4px }
         .fo b { font-weight:700 }
         @container (max-width: 420px) {
@@ -206,9 +208,7 @@ class TitanStatusCard extends HTMLElement {
           .inhead .cb ha-icon { --mdc-icon-size:16px }
         }
         @container (max-width: 380px) {
-          .ring { width:78px;height:78px }
-          .ring ha-icon { --mdc-icon-size:28px }
-          .ring span { font-size:.6rem }
+          .ringed .wrap { min-height:190px }
           .soc { font-size:2.4rem }
           .chip { padding:2px 5px;font-size:.64rem }
           .main { padding:10px 10px 8px }
@@ -221,12 +221,12 @@ class TitanStatusCard extends HTMLElement {
           .fo i { font-size:.46rem;padding:1px 2px }
         }
       </style>
-      <ha-card>
+      <ha-card class="${c.show_ring ? "ringed" : ""}">
         ${plTop ? plHtml : ""}
         <div class="wrap">
           <div class="side">
-            <div class="eta"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="etav">--:--</span></div>
-            <div class="mid"><div class="vt">—</div><div class="bar"><i></i></div></div>
+            <div class="eta"${c.show_eta === false ? ' style="visibility:hidden"' : ""}><ha-icon icon="mdi:clock-outline"></ha-icon><span class="etav">--:--</span></div>
+            <div class="mid"><div class="vt"${c.show_label === false ? ' style="display:none"' : ""}>—</div><div class="bar"><i></i></div></div>
             <div class="pw"><ha-icon icon="mdi:flash"></ha-icon><span class="pwv">0W</span></div>
           </div>
           <div class="main">
@@ -318,7 +318,7 @@ class TitanStatusCard extends HTMLElement {
       linksCfg.forEach(lc => {
         const lk = document.createElement("titan-link-card");
         lk.setConfig({ theme: c.theme, gold: c.gold, state_entity: c.state_entity, power_entity: c.power_entity,
-          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, background: c.background,
+          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, background: c.background, text_color: c.text_color, border_color: c.border_color,
           ...lc, brand: "", embedded: true });
         lp.append(lk); this._lk.push(lk);
       });
@@ -429,8 +429,10 @@ class TitanStatusCard extends HTMLElement {
     const bcs = c.theme === "black"
       ? { charge: "#a6ffc4", discharge: "#58b0ff", static: "#58b0ff", low: "#ff5a5f", ...clean(c.bar_colors_dark) }
       : c.bar_colors;
-    e.card.style.setProperty("--bc", low ? bcs.low : bcs[kind]);
-    e.barBox.className = "bar " + kind;
+    // batterie pleine (100 %) et pas en décharge : barre verte fixe, sans balayage lumineux
+    const full = Number.isFinite(soc) && soc >= 99.5 && kind !== "discharge";
+    e.card.style.setProperty("--bc", low ? bcs.low : full ? (bcs.full || bcs.charge) : bcs[kind]);
+    e.barBox.className = "bar " + (full ? "static full" : kind);
     e.card.style.setProperty("--pc", low ? "#e5484d" : c.gold);
 
     e.vt.textContent = c.labels[kind];
@@ -549,7 +551,7 @@ class TitanLinkCard extends TitanStatusCard {
 
   _build() {
     const c = this._c, dark = c.theme === "black", light = c.theme !== "auto" && !dark;
-    const tc = dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)";
+    const tc = tscCol(c.text_color) || (dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)");
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block }
@@ -566,7 +568,7 @@ class TitanLinkCard extends TitanStatusCard {
         .soc { font-size:3rem;font-weight:800;line-height:1;color:var(--pc,var(--gold));display:flex;align-items:baseline }
         .soc small { font-size:1.1rem;font-weight:600;margin-left:3px }
         .chips { display:flex;flex-direction:column;gap:6px;align-items:stretch;margin-top:16px;min-width:104px }
-        .chip { display:flex;align-items:center;justify-content:center;gap:3px;border:1.5px solid var(--gold);color:${tc};
+        .chip { display:flex;align-items:center;justify-content:center;gap:3px;border:1.5px solid var(--bd,var(--gold));color:${tc};
           border-radius:8px;padding:3px 8px;font-size:.72rem;font-weight:600;white-space:nowrap }
         .chip ha-icon { --mdc-icon-size:16px;color:var(--gold) }
         .chip small { font-weight:500 }
@@ -609,9 +611,13 @@ class TitanLinkCard extends TitanStatusCard {
     let p = this._num(c.power_entity);
     if (Number.isFinite(p) && !c.power_charge_positive) p = -p;
     const kind = this._kind(p);
-    e.card.style.setProperty("--bc", low ? c.bar_colors.low : c.bar_colors[kind]);
+    const full = Number.isFinite(soc) && soc >= 99.5 && kind !== "discharge";
+    const bcs = c.theme === "black"
+      ? { charge: "#a6ffc4", ...clean(c.bar_colors_dark) }
+      : c.bar_colors;
+    e.card.style.setProperty("--bc", low ? c.bar_colors.low : full ? (bcs.full || bcs.charge || c.bar_colors.charge) : c.bar_colors[kind]);
     e.card.style.setProperty("--pc", low ? c.bar_colors.low : c.gold);
-    e.track.className = "track " + kind;
+    e.track.className = "track " + (full ? "static full" : kind);
     e.socv.textContent = Number.isFinite(soc) ? this._fmt(soc, 0) : "—";
     e.fill.style.width = (Number.isFinite(soc) ? Math.max(0, Math.min(100, soc)) : 0) + "%";
     if (e.tv) { const t = this._num(c.temp_entity); e.tv.textContent = Number.isFinite(t) ? this._fmt(t, 1) + " °C" : "—"; }
@@ -631,8 +637,8 @@ customElements.define("titan-link-card", TitanLinkCard);
 /* ===== Éditeur visuel (interface de configuration de la carte) ===== */
 const TSC_N = { link: 5, controls: 6, slots: 4 };
 const TSC_LABELS = {
-  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)",
-  show_ring: "Cercle d'état à droite", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
+  show_ring: "Cercle d'état à droite", show_eta: "Heure estimée (horloge en haut à gauche)", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
@@ -644,7 +650,9 @@ const TSC_LABELS = {
   lk_soc: "SOC", lk_temp: "Température", lk_cycles: "Cycles", lk_name: "Nom",
 };
 const TSC_HELP = {
-  background: "Exemple : #f3ecdc (beige). Vide = fond d'origine",
+  background: "Exemple : #EDE8D0 (beige). Vide = fond d'origine",
+  text_color: "Exemple : #333333. Vide = couleur d'origine",
+  border_color: "Cadres des pastilles, du cercle et des boutons. Exemple : #39ff14. Vide = couleur d'accent",
   soc_entity: "Exemple : …_pile_average", power_entity: "Exemple : …_ac_input_and_output (positif = charge)",
   state_entity: "Exemple : …_battery_state", mode_entity: "Exemple : …_working_mode",
   floor_entity: "Exemple : cluster_soc_security_esp", days_entity: "Exemple : …_jours_depuis_charge_complete",
@@ -691,18 +699,22 @@ class TitanStatusCardEditor extends HTMLElement {
     d.controls_position = c.controls_position === "bottom" ? "bottom" : "top";
     d.palette = c.palette === "green" ? "green" : "gold";
     if (c.power_charge_positive === undefined) d.power_charge_positive = true;
+    d.show_eta = c.show_eta !== false;
+    d.show_label = c.show_label !== false;
     return d;
   }
   _unflatten(d, base) {
     const out = { ...base };
     const has = v => v !== undefined && v !== null && v !== "";
     const put = (k, v) => { if (has(v)) out[k] = v; else delete out[k]; };
-    ["name", "brand", "gold", "background", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity"]
+    ["name", "brand", "gold", "background", "text_color", "border_color", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity"]
       .forEach(k => put(k, d[k]));
     ["capacity_kwh", "history_hours", "threshold"].forEach(k => put(k, has(d[k]) ? Number(d[k]) : undefined));
     if (d.palette === "green") out.palette = "green"; else delete out.palette;
     if (d.show_ring) out.show_ring = true; else delete out.show_ring;
     if (d.show_temps) out.show_temps = true; else delete out.show_temps;
+    if (d.show_eta === false) out.show_eta = false; else delete out.show_eta;
+    if (d.show_label === false) out.show_label = false; else delete out.show_label;
     if (d.power_charge_positive === false) out.power_charge_positive = false; else delete out.power_charge_positive;
     // Link : un objet s'il n'y en a qu'un, une liste sinon
     const links = [];
@@ -763,9 +775,9 @@ class TitanStatusCardEditor extends HTMLElement {
       tscTxt("sl" + i + "_label"), tscEnt("sl" + i + "_start"), tscEnt("sl" + i + "_end")] });
     return [
       { type: "expandable", name: "", title: "Général", icon: "mdi:cog", expanded: true, schema: [
-        tscTxt("name"), tscTxt("brand"), tscTxt("background"),
+        tscTxt("name"), tscTxt("brand"), tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
-        tscBool("show_ring"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        tscBool("show_ring"), tscBool("show_eta"), tscBool("show_label"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
         tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
