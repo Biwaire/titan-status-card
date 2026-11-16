@@ -10,13 +10,13 @@ puissance, courbe, compteurs), avec un module **Link** repliable. Deux styles : 
 
 Carte repliée, puis avec le module Link déplié (flèche sous la carte), en blanc et doré ou en noir et vert :
 
-![Carte repliée](images%20demo/apercu-replie.png)
+![Carte repliée](images/apercu-replie.png)
 
-![Carte avec un Link](images%20demo/apercu-link.png)
+![Carte avec un Link](images/apercu-link.png)
 
 Plusieurs modules Link peuvent être empilés (ici 5) :
 
-![Carte avec 5 Link](images%20demo/apercu-5-links.png)
+![Carte avec 5 Link](images/apercu-5-links.png)
 
 ## Installation
 
@@ -59,6 +59,10 @@ link:                       # module repliable sous la carte (facultatif)
 ```
 
 Seul `soc_entity` est obligatoire.
+
+## Éditeur visuel
+
+La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de cartes (« Titan Status Card »), ou ouvre ta carte puis **Modifier**. L'éditeur propose des sections repliables : Général, Entités (avec recherche d'entités), Boutons de commande, Planning de recharge (plages, puissance, SOC cible, position) et Modules Link (jusqu'à 5). Avec l'intégration izypower_titan, choisis le SOC (`…_pile_average`) : la puissance (`…_ac_input_and_output`), l'état (`…_battery_state`) et le mode (`…_working_mode`) sont remplis automatiquement s'ils existent. Chaque champ affiche un exemple de nom d'entité. Les options absentes de l'éditeur (`pv`, `temps`, `footer`, couleurs…) restent dans le YAML et sont conservées.
 
 ## Options principales
 
@@ -124,6 +128,7 @@ planning:
   power_entity: input_number.planning_recharge_puissance
   soc_entity: input_number.planning_recharge_soc_cible
   power_warn: 800                      # facultatif : seuil (W) de l'avertissement, 800 par défaut
+  position: top                        # facultatif : section au-dessus de la Titan (par défaut : en dessous)
   end_entity: input_select.planning_recharge_fin   # facultatif : choix de l'action de fin
 ```
 

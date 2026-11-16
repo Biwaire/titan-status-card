@@ -74,7 +74,8 @@ class TitanStatusCard extends HTMLElement {
     const pl = c.planning && typeof c.planning === "object" ? c.planning : null;
     const plSlots = pl && Array.isArray(pl.slots) ? pl.slots.filter(o => o && o.start && o.end).slice(0, 4) : [];
     const warnW = pl && Number.isFinite(Number(pl.power_warn)) ? Number(pl.power_warn) : 800;
-    const plHtml = pl ? `<div class="pl">
+    const plTop = !!(pl && String(pl.position || "").toLowerCase() === "top");
+    const plHtml = pl ? `<div class="pl${plTop ? " top" : ""}">
         <div class="ph"><button class="pt"><ha-icon icon="mdi:calendar-clock"></ha-icon><span>${this._esc(pl.name || "Planning de recharge")}</span><ha-icon class="pc" icon="mdi:chevron-down"></ha-icon></button>
           ${pl.enable_entity ? `<button class="pe">—</button>` : ""}</div>
         <div class="pb" hidden>
@@ -93,6 +94,7 @@ class TitanStatusCard extends HTMLElement {
         .wrap { display:flex;min-height:190px }
         .ctl { display:flex;gap:8px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
         .pl { border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
+        .pl.top { border-top:0;border-bottom:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
         .ph { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px }
         .pt { all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;min-width:0;font-size:.66rem;font-weight:800;
           letter-spacing:.1em;text-transform:uppercase;color:${tc} }
@@ -210,6 +212,7 @@ class TitanStatusCard extends HTMLElement {
         }
       </style>
       <ha-card>
+        ${plTop ? plHtml : ""}
         <div class="wrap">
           <div class="side">
             <div class="eta"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="etav">--:--</span></div>
@@ -239,7 +242,7 @@ class TitanStatusCard extends HTMLElement {
           </div>
         </div>
         ${ctlBottom ? ctl : ""}
-        ${plHtml}
+        ${plTop ? "" : plHtml}
         ${linksCfg.length ? `<div class="tg"><button class="tb" aria-label="Afficher ou masquer le Link"><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>
         <div class="lp" hidden></div>` : ""}
       </ha-card>`;
@@ -614,6 +617,232 @@ class TitanLinkCard extends TitanStatusCard {
 
 customElements.define("titan-status-card", TitanStatusCard);
 customElements.define("titan-link-card", TitanLinkCard);
+
+/* ===== Éditeur visuel (interface de configuration de la carte) ===== */
+const TSC_N = { link: 5, controls: 6, slots: 4 };
+const TSC_LABELS = {
+  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)",
+  show_ring: "Cercle d'état à droite", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
+  soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
+  floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
+  stored_entity: "Énergie stockée (kWh)", history_entity: "Entité de l'historique (optionnel)",
+  controls_position: "Position des boutons de commande",
+  pl_name: "Titre de la section", pl_enable: "Interrupteur du planning", pl_active: "Indicateur « En cours » (optionnel)",
+  pl_power: "Puissance de recharge", pl_soc: "SOC cible", pl_warn: "Seuil d'avertissement (W)",
+  pl_position: "Position de la section", pl_end: "Action de fin (optionnel)",
+  lk_soc: "SOC", lk_temp: "Température", lk_cycles: "Cycles", lk_name: "Nom",
+};
+const TSC_HELP = {
+  soc_entity: "Exemple : …_pile_average", power_entity: "Exemple : …_ac_input_and_output (positif = charge)",
+  state_entity: "Exemple : …_battery_state", mode_entity: "Exemple : …_working_mode",
+  floor_entity: "Exemple : cluster_soc_security_esp", days_entity: "Exemple : …_jours_depuis_charge_complete",
+  ct0_entity: "Exemple : …_leds_control", ct1_entity: "Exemple : …_off_grid", ct_entity: "Exemple : …_leds_control, …_off_grid",
+  lk_soc: "Exemple : …_link_soc", lk_temp: "Exemple : …_link_temperature", lk_cycles: "Exemple : …_link_cycles",
+  pl_enable: "Exemple : planning_recharge_actif", pl_active: "Exemple : planning_recharge_en_cours",
+  pl_power: "Exemple : planning_recharge_puissance", pl_soc: "Exemple : planning_recharge_soc_cible",
+  sl_start: "Exemple : planning_recharge_debut_nuit", sl_end: "Exemple : planning_recharge_fin_nuit",
+};
+// entités déduites du SOC : préfixe + suffixe (intégration izypower_titan)
+const TSC_AUTO = { power_entity: "ac_input_and_output", state_entity: "battery_state", mode_entity: "working_mode" };
+const TSC_FLOOR = "number.cluster_soc_security_esp";
+const TSC_POS = [{ value: "bottom", label: "En dessous de la Titan" }, { value: "top", label: "Au-dessus de la Titan" }];
+const tscEnt = (name, domain) => ({ name, selector: { entity: domain ? { domain } : {} } });
+const tscTxt = name => ({ name, selector: { text: {} } });
+const tscBool = name => ({ name, selector: { boolean: {} } });
+const tscNum = (name, step) => ({ name, selector: { number: { mode: "box", step: step || 1 } } });
+
+class TitanStatusCardEditor extends HTMLElement {
+  setConfig(config) { this._config = config || {}; this._render(); }
+  set hass(h) { this._hass = h; if (this._form) this._form.hass = h; }
+
+  // --- passage config <-> champs à plat du formulaire
+  _flatten(c) {
+    const d = { ...c };
+    const links = Array.isArray(c.link) ? c.link : (c.link && typeof c.link === "object" ? [c.link] : []);
+    for (let i = 0; i < TSC_N.link; i++) {
+      const o = links[i] || {};
+      d["lk" + i + "_name"] = o.name; d["lk" + i + "_soc"] = o.soc_entity; d["lk" + i + "_temp"] = o.temp_entity; d["lk" + i + "_cycles"] = o.cycles_entity;
+    }
+    const ct = Array.isArray(c.controls) ? c.controls : [];
+    for (let i = 0; i < TSC_N.controls; i++) {
+      const o = ct[i] || {};
+      d["ct" + i + "_entity"] = o.entity; d["ct" + i + "_label"] = o.label; d["ct" + i + "_icon"] = o.icon; d["ct" + i + "_confirm"] = !!o.confirm;
+    }
+    const p = c.planning && typeof c.planning === "object" ? c.planning : {};
+    d.pl_name = p.name; d.pl_enable = p.enable_entity; d.pl_active = p.active_entity; d.pl_power = p.power_entity; d.pl_soc = p.soc_entity;
+    d.pl_warn = p.power_warn; d.pl_position = p.position === "top" ? "top" : "bottom"; d.pl_end = p.end_entity;
+    const sl = Array.isArray(p.slots) ? p.slots : [];
+    for (let i = 0; i < TSC_N.slots; i++) {
+      const o = sl[i] || {};
+      d["sl" + i + "_label"] = o.label; d["sl" + i + "_start"] = o.start; d["sl" + i + "_end"] = o.end;
+    }
+    d.controls_position = c.controls_position === "bottom" ? "bottom" : "top";
+    d.palette = c.palette === "green" ? "green" : "gold";
+    if (c.power_charge_positive === undefined) d.power_charge_positive = true;
+    return d;
+  }
+  _unflatten(d, base) {
+    const out = { ...base };
+    const has = v => v !== undefined && v !== null && v !== "";
+    const put = (k, v) => { if (has(v)) out[k] = v; else delete out[k]; };
+    ["name", "brand", "gold", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity"]
+      .forEach(k => put(k, d[k]));
+    ["capacity_kwh", "history_hours", "threshold"].forEach(k => put(k, has(d[k]) ? Number(d[k]) : undefined));
+    if (d.palette === "green") out.palette = "green"; else delete out.palette;
+    if (d.show_ring) out.show_ring = true; else delete out.show_ring;
+    if (d.show_temps) out.show_temps = true; else delete out.show_temps;
+    if (d.power_charge_positive === false) out.power_charge_positive = false; else delete out.power_charge_positive;
+    // Link : un objet s'il n'y en a qu'un, une liste sinon
+    const links = [];
+    for (let i = 0; i < TSC_N.link; i++) {
+      const o = {};
+      if (has(d["lk" + i + "_name"])) o.name = d["lk" + i + "_name"];
+      if (has(d["lk" + i + "_soc"])) o.soc_entity = d["lk" + i + "_soc"];
+      if (has(d["lk" + i + "_temp"])) o.temp_entity = d["lk" + i + "_temp"];
+      if (has(d["lk" + i + "_cycles"])) o.cycles_entity = d["lk" + i + "_cycles"];
+      const prev = (Array.isArray(base.link) ? base.link[i] : (i === 0 && base.link && typeof base.link === "object" ? base.link : null)) || {};
+      if (Object.keys(o).length) links.push({ ...prev, ...o, ...(has(d["lk" + i + "_name"]) ? {} : { name: undefined }) });
+    }
+    links.forEach(o => { if (o.name === undefined) delete o.name; });
+    if (!links.length) delete out.link; else out.link = links.length === 1 && !Array.isArray(base.link) ? links[0] : links;
+    // Boutons de commande
+    const ctl = [];
+    for (let i = 0; i < TSC_N.controls; i++) {
+      if (!has(d["ct" + i + "_entity"])) continue;
+      const prev = (Array.isArray(base.controls) ? base.controls[i] : null) || {};
+      const o = { ...prev, entity: d["ct" + i + "_entity"] };
+      if (has(d["ct" + i + "_label"])) o.label = d["ct" + i + "_label"]; else delete o.label;
+      if (has(d["ct" + i + "_icon"])) o.icon = d["ct" + i + "_icon"]; else delete o.icon;
+      if (d["ct" + i + "_confirm"]) o.confirm = true; else delete o.confirm;
+      ctl.push(o);
+    }
+    if (ctl.length) out.controls = ctl; else delete out.controls;
+    if (d.controls_position === "bottom") out.controls_position = "bottom"; else delete out.controls_position;
+    // Planning (présent seulement si l'interrupteur est renseigné)
+    if (has(d.pl_enable)) {
+      const p = { ...(base.planning && typeof base.planning === "object" ? base.planning : {}) };
+      const q = (k, v) => { if (has(v)) p[k] = v; else delete p[k]; };
+      q("name", d.pl_name); p.enable_entity = d.pl_enable; q("active_entity", d.pl_active);
+      q("power_entity", d.pl_power); q("soc_entity", d.pl_soc); q("end_entity", d.pl_end);
+      q("power_warn", has(d.pl_warn) ? Number(d.pl_warn) : undefined);
+      if (d.pl_position === "top") p.position = "top"; else delete p.position;
+      const slots = [];
+      for (let i = 0; i < TSC_N.slots; i++) {
+        if (!has(d["sl" + i + "_start"]) || !has(d["sl" + i + "_end"])) continue;
+        const prev = (Array.isArray(p.slots) ? p.slots[i] : null) || {};
+        const o = { ...prev, start: d["sl" + i + "_start"], end: d["sl" + i + "_end"] };
+        if (has(d["sl" + i + "_label"])) o.label = d["sl" + i + "_label"]; else delete o.label;
+        slots.push(o);
+      }
+      if (slots.length) p.slots = slots; else delete p.slots;
+      out.planning = p;
+    } else delete out.planning;
+    return out;
+  }
+
+  _schema() {
+    const T = "input_datetime", S = ["switch", "input_boolean", "light"];
+    const links = [], ctls = [], slots = [];
+    for (let i = 0; i < TSC_N.link; i++) links.push({ type: "expandable", name: "", title: "Link " + (i + 1), schema: [
+      tscTxt("lk" + i + "_name"), tscEnt("lk" + i + "_soc"), tscEnt("lk" + i + "_temp"), tscEnt("lk" + i + "_cycles")] });
+    for (let i = 0; i < TSC_N.controls; i++) ctls.push({ type: "expandable", name: "", title: "Bouton " + (i + 1), schema: [
+      tscEnt("ct" + i + "_entity", S), tscTxt("ct" + i + "_label"), { name: "ct" + i + "_icon", selector: { icon: {} } }, tscBool("ct" + i + "_confirm")] });
+    for (let i = 0; i < TSC_N.slots; i++) slots.push({ type: "expandable", name: "", title: "Plage " + (i + 1), expanded: i < 2, schema: [
+      tscTxt("sl" + i + "_label"), tscEnt("sl" + i + "_start"), tscEnt("sl" + i + "_end")] });
+    return [
+      { type: "expandable", name: "", title: "Général", icon: "mdi:cog", expanded: true, schema: [
+        tscTxt("name"), tscTxt("brand"),
+        { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
+        tscBool("show_ring"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
+      { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
+        tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
+        tscEnt("mode_entity"), tscEnt("days_entity"), tscEnt("stored_entity"), tscEnt("history_entity")] },
+      { type: "expandable", name: "", title: "Boutons de commande (LED, Off-grid…)", icon: "mdi:toggle-switch", schema: [
+        { name: "controls_position", selector: { select: { mode: "dropdown", options: [{ value: "top", label: "Dans l'en-tête" }, { value: "bottom", label: "Sous la carte" }] } } },
+        ...ctls] },
+      { type: "expandable", name: "", title: "Planning de recharge", icon: "mdi:calendar-clock", schema: [
+        tscEnt("pl_enable", "input_boolean"), tscTxt("pl_name"), tscEnt("pl_active", "input_boolean"),
+        ...slots, tscEnt("pl_power"), tscEnt("pl_soc"), tscNum("pl_warn"), tscEnt("pl_end", "input_select"),
+        { name: "pl_position", selector: { select: { mode: "dropdown", options: TSC_POS } } }] },
+      { type: "expandable", name: "", title: "Modules Link", icon: "mdi:battery-plus", schema: links },
+    ];
+  }
+
+  async _render() {
+    if (!this._wrap) {
+      this._wrap = document.createElement("div");
+      this.appendChild(this._wrap);
+      try { // charge les sélecteurs d'entités de Home Assistant si besoin
+        if (!customElements.get("ha-selector") && window.loadCardHelpers) {
+          const h = await window.loadCardHelpers();
+          const c = await h.createCardElement({ type: "entities", entities: [] });
+          if (c && c.constructor && c.constructor.getConfigElement) await c.constructor.getConfigElement();
+        }
+      } catch (e) { /* ignore */ }
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = s => TSC_LABELS[s.name] || TSC_LABELS[(s.name || "").replace(/^(lk|ct|sl)\d_/, "")] || ({
+        confirm: "Confirmer avant d'agir", label: "Libellé", entity: "Entité", icon: "Icône", start: "Début", end: "Fin", soc: "SOC", temp: "Température", cycles: "Cycles" }[(s.name || "").replace(/^(lk|ct|sl)\d_/, "")]) || s.name;
+      this._form.computeHelper = s => TSC_HELP[s.name] || TSC_HELP[(s.name || "").replace(/^(lk|sl)\d_/, "$1_").replace(/^ct\d_/, "ct_")] || "";
+      this._form.addEventListener("value-changed", ev => {
+        ev.stopPropagation();
+        const val = { ...ev.detail.value };
+        const old = this._flatten(this._config || {}); let filled = false;
+        const st = this._hass ? this._hass.states : null;
+        const fill = (k, id) => { if (!val[k] && st && st[id]) { val[k] = id; filled = true; } };
+        const m = st && val.soc_entity && val.soc_entity !== old.soc_entity ? /^sensor\.(.*_)pile_average$/.exec(val.soc_entity) : null;
+        if (m) {
+          Object.keys(TSC_AUTO).forEach(k => fill(k, "sensor." + m[1] + TSC_AUTO[k]));
+          fill("floor_entity", TSC_FLOOR);
+        }
+        for (let i = 0; i < TSC_N.link; i++) {
+          const v = val["lk" + i + "_soc"], l = v && v !== old["lk" + i + "_soc"] ? /^sensor\.(.*_link_)soc$/.exec(v) : null;
+          if (l) { fill("lk" + i + "_temp", "sensor." + l[1] + "temperature"); fill("lk" + i + "_cycles", "sensor." + l[1] + "cycles"); }
+        }
+        const cfg = this._unflatten(val, this._config);
+        this._config = cfg;
+        if (filled) this._form.data = this._flatten(cfg);
+        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: cfg }, bubbles: true, composed: true }));
+      });
+      this._wrap.appendChild(this._form);
+      if (this._hass) this._form.hass = this._hass;
+    }
+    if (!this._form) return; // premier rendu encore en cours : il utilisera la config à jour
+    this._form.schema = this._schema();
+    this._form.data = this._flatten(this._config);
+  }
+}
+
+class TitanLinkCardEditor extends TitanStatusCardEditor {
+  _flatten(c) { return { ...c }; }
+  _unflatten(d, base) {
+    const out = { ...base };
+    ["name", "soc_entity", "temp_entity", "cycles_entity"].forEach(k => { if (d[k] !== undefined && d[k] !== null && d[k] !== "") out[k] = d[k]; else delete out[k]; });
+    return out;
+  }
+  _schema() { return [tscTxt("name"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity")]; }
+}
+TSC_LABELS.temp_entity = "Température"; TSC_LABELS.cycles_entity = "Cycles";
+
+TitanStatusCard.getConfigElement = () => document.createElement("titan-status-card-editor");
+TitanStatusCard.getStubConfig = (hass) => {
+  const ids = hass && hass.states ? Object.keys(hass.states) : [];
+  const pile = ids.find(i => /^sensor\..*_pile_average$/.test(i));
+  if (pile) {
+    const pre = pile.slice(0, -"pile_average".length), c = { soc_entity: pile, name: "Titan" };
+    Object.keys(TSC_AUTO).forEach(k => { if (hass.states[pre + TSC_AUTO[k]]) c[k] = pre + TSC_AUTO[k]; });
+    if (hass.states[TSC_FLOOR]) c.floor_entity = TSC_FLOOR;
+    return c;
+  }
+  const soc = ids.find(i => /^sensor\..*(soc|battery)/i.test(i)) || ids.find(i => i.startsWith("sensor.")) || "";
+  return { soc_entity: soc, name: "Titan" };
+};
+TitanLinkCard.getConfigElement = () => document.createElement("titan-link-card-editor");
+TitanLinkCard.getStubConfig = TitanStatusCard.getStubConfig;
+customElements.define("titan-status-card-editor", TitanStatusCardEditor);
+customElements.define("titan-link-card-editor", TitanLinkCardEditor);
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "titan-link-card",
