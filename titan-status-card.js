@@ -259,7 +259,7 @@ class TitanStatusCard extends HTMLElement {
     const r = this.shadowRoot;
     this._e = {
       card: r.querySelector("ha-card"), side: r.querySelector(".side"), barBox: r.querySelector(".bar"),
-      etav: r.querySelector(".etav"), vt: r.querySelector(".vt"), bar: r.querySelector(".bar i"),
+      etav: r.querySelector(".etav"), eta: r.querySelector(".eta"), vt: r.querySelector(".vt"), bar: r.querySelector(".bar i"),
       pwv: r.querySelector(".pwv"), socv: r.querySelector(".socv"), kwh: r.querySelector(".kwh"),
       ring: r.querySelector(".ring"), ringIcon: r.querySelector(".ring ha-icon"), rl: r.querySelector(".rl"),
       mv: r.querySelector(".mv"), dv: r.querySelector(".dv"),
@@ -456,6 +456,8 @@ class TitanStatusCard extends HTMLElement {
       else if (kind === "charge") eta = this._hm(Math.max(0, 100 - soc) / 100 * cap * 1000 / Math.abs(p));
     }
     e.etav.textContent = eta;
+    // masquée si show_eta est false, ou en veille (sauf eta_hide_idle: false) ; la place reste réservée
+    if (e.eta) e.eta.style.visibility = (c.show_eta === false || (c.eta_hide_idle !== false && kind === "static")) ? "hidden" : "";
 
     if (e.mv) {
       const m = this._txt(c.mode_entity);
@@ -638,7 +640,7 @@ customElements.define("titan-link-card", TitanLinkCard);
 const TSC_N = { link: 5, controls: 6, slots: 4 };
 const TSC_LABELS = {
   name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
-  show_ring: "Cercle d'état à droite", show_eta: "Heure estimée (horloge en haut à gauche)", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  show_ring: "Cercle d'état à droite", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
@@ -700,6 +702,7 @@ class TitanStatusCardEditor extends HTMLElement {
     d.palette = c.palette === "green" ? "green" : "gold";
     if (c.power_charge_positive === undefined) d.power_charge_positive = true;
     d.show_eta = c.show_eta !== false;
+    d.eta_hide_idle = c.eta_hide_idle !== false;
     d.show_label = c.show_label !== false;
     return d;
   }
@@ -714,6 +717,7 @@ class TitanStatusCardEditor extends HTMLElement {
     if (d.show_ring) out.show_ring = true; else delete out.show_ring;
     if (d.show_temps) out.show_temps = true; else delete out.show_temps;
     if (d.show_eta === false) out.show_eta = false; else delete out.show_eta;
+    if (d.eta_hide_idle === false) out.eta_hide_idle = false; else delete out.eta_hide_idle;
     if (d.show_label === false) out.show_label = false; else delete out.show_label;
     if (d.power_charge_positive === false) out.power_charge_positive = false; else delete out.power_charge_positive;
     // Link : un objet s'il n'y en a qu'un, une liste sinon
@@ -777,7 +781,7 @@ class TitanStatusCardEditor extends HTMLElement {
       { type: "expandable", name: "", title: "Général", icon: "mdi:cog", expanded: true, schema: [
         tscTxt("name"), tscTxt("brand"), tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
-        tscBool("show_ring"), tscBool("show_eta"), tscBool("show_label"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        tscBool("show_ring"), tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
         tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),

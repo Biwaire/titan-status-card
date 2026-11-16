@@ -88,6 +88,7 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs. `bar_colors.full` (optionnel) règle la couleur de la barre quand la batterie est pleine (par défaut, celle de `charge`) |
 | `show_ring` | Cercle d'état à droite (désactivé par défaut), dynamique : sa taille s'adapte à la largeur de la carte (PC, tablette, téléphone) et il ne déborde plus sur la courbe |
 | `show_eta` | `false` masque l'horloge / heure estimée en haut à gauche (affichée par défaut) |
+| `eta_hide_idle` | L'heure estimée se masque automatiquement quand la batterie est en veille. `false` pour la garder toujours visible (affichée par défaut `--:--`) |
 | `show_label` | `false` masque le texte vertical à gauche (VEILLE, CHARGE…). Affiché par défaut |
 
 Boutons de commande (par exemple LED et mode hors réseau) dans l'en-tête de la carte : icônes seules sur écran étroit, avec leur nom sur écran large. `confirm: true` demande un second appui avant d'agir, et `controls_position: bottom` les place en rangée sous la carte :
