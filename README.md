@@ -97,6 +97,22 @@ controls:
 
 Section repliable sous la carte (la flèche « Planning de recharge ») : un interrupteur Activé / Désactivé / En cours, des plages horaires modifiables, la puissance et le SOC cible avec des boutons + et −.
 
+Aperçu : replié, puis déplié (section placée au-dessus de la Titan avec `position: top`).
+
+![Planning replié](images/planning-replie.png)
+
+![Planning déplié](images/planning-deplie.png)
+
+Au-dessus de la puissance limite (800 W par défaut), un avertissement s'affiche :
+
+![Avertissement au-dessus de 800 W](images/planning-avertissement.png)
+
+La section se place sous la Titan (par défaut) ou au-dessus (`position: top`), avec ou sans module Link :
+
+![Planning sous la Titan](images/planning-position-bas.png)
+
+![Planning au-dessus de la Titan](images/planning-position-haut.png)
+
 **La carte ne fait que lire et écrire des entités : la recharge elle-même est pilotée par des automatisations.** Elles sont fournies dans [`planning/planning_recharge.yaml`](planning/planning_recharge.yaml) (batteries Izypower Titan avec l'intégration [izypower_titan](https://github.com/khirale/izypower_titan)). Le planning est **manuel** : tu l'actives toi-même. À l'heure de début, la batterie passe en RealTime, règle la puissance et le SOC cible, puis lance la charge. À la fin (heure de fin ou SOC atteint), l'action choisie s'exécute : **Standby** (par défaut : la charge s'arrête et la Titan reste en RealTime) ou **Self-consumed** (retour à l'autoconsommation). Le planning se coupe ensuite : il faut le réactiver à la main.
 
 > Après un Standby, la batterie ne se recharge plus avec le solaire tant que tu n'as pas choisi un autre mode. Choisis « Self-consumed » comme action de fin si tu veux revenir à l'autoconsommation automatiquement.
