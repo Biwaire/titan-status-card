@@ -1,6 +1,14 @@
 /* titan-status-card — carte d'état d'une batterie (SOC, état, puissance, PV, températures, courbe, compteurs) */
 // ignore les valeurs vides ou false d'un réglage (l'éditeur Home Assistant en laisse parfois)
 const clean = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v));
+/* Fond et couleur du texte de la carte ; l'option background impose la couleur de fond */
+function tscBg(c, dark, light) {
+  const txt = dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)";
+  const def = dark ? "#0f1210" : light ? "#fbfaf7" : "var(--card-background-color)";
+  const bg = typeof c.background === "string" && c.background.trim() ? c.background.replace(/[;{}<>]/g, "").trim() : def;
+  return "background:" + bg + ";color:" + txt + ";";
+}
+
 class TitanStatusCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.soc_entity) throw new Error("soc_entity est obligatoire");
@@ -90,7 +98,7 @@ class TitanStatusCard extends HTMLElement {
       <style>
         :host { display:block }
         ha-card { display:block;overflow:hidden;border-radius:16px;container-type:inline-size;
-          ${dark ? "background:#0f1210;color:#f1f5f2;" : light ? "background:#fbfaf7;color:#111;" : "background:var(--card-background-color);color:var(--primary-text-color);"} }
+          ${tscBg(c, dark, light)} }
         .wrap { display:flex;min-height:190px }
         .ctl { display:flex;gap:8px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
         .pl { border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
@@ -102,6 +110,8 @@ class TitanStatusCard extends HTMLElement {
         .pt span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
         .pt .pc { transition:transform .25s }
         .pt.open .pc { transform:rotate(180deg) }
+        .pl.top .pt .pc { transform:rotate(180deg) }
+        .pl.top .pt.open .pc { transform:none }
         .pe { all:unset;cursor:pointer;border:1.5px solid var(--gold);border-radius:8px;padding:2px 9px;font-size:.62rem;
           font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${tc};white-space:nowrap }
         .pe.on { background:var(--gold);color:#111 }
@@ -308,7 +318,7 @@ class TitanStatusCard extends HTMLElement {
       linksCfg.forEach(lc => {
         const lk = document.createElement("titan-link-card");
         lk.setConfig({ theme: c.theme, gold: c.gold, state_entity: c.state_entity, power_entity: c.power_entity,
-          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors,
+          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, background: c.background,
           ...lc, brand: "", embedded: true });
         lp.append(lk); this._lk.push(lk);
       });
@@ -546,7 +556,7 @@ class TitanLinkCard extends TitanStatusCard {
         ha-card { display:flex;flex-direction:row;min-height:190px;box-sizing:border-box;
           overflow:hidden;border-radius:${c.embedded ? "0" : "16px"};padding:0;container-type:inline-size;
           ${c.embedded ? "box-shadow:none;border:none;" : ""}
-          ${dark ? "background:#0f1210;color:#f1f5f2;" : light ? "background:#fbfaf7;color:#111;" : "background:var(--card-background-color);color:var(--primary-text-color);"} }
+          ${tscBg(c, dark, light)} }
         .sd { width:56px;flex:none;background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 82%,#fff),var(--gold)) }
         .bd { flex:1;min-width:0;padding:12px 14px 10px;display:flex;flex-direction:column }
         .head { display:flex;justify-content:space-between;align-items:baseline }
@@ -621,7 +631,7 @@ customElements.define("titan-link-card", TitanLinkCard);
 /* ===== Éditeur visuel (interface de configuration de la carte) ===== */
 const TSC_N = { link: 5, controls: 6, slots: 4 };
 const TSC_LABELS = {
-  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)",
+  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)",
   show_ring: "Cercle d'état à droite", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
@@ -634,6 +644,7 @@ const TSC_LABELS = {
   lk_soc: "SOC", lk_temp: "Température", lk_cycles: "Cycles", lk_name: "Nom",
 };
 const TSC_HELP = {
+  background: "Exemple : #f3ecdc (beige). Vide = fond d'origine",
   soc_entity: "Exemple : …_pile_average", power_entity: "Exemple : …_ac_input_and_output (positif = charge)",
   state_entity: "Exemple : …_battery_state", mode_entity: "Exemple : …_working_mode",
   floor_entity: "Exemple : cluster_soc_security_esp", days_entity: "Exemple : …_jours_depuis_charge_complete",
@@ -686,7 +697,7 @@ class TitanStatusCardEditor extends HTMLElement {
     const out = { ...base };
     const has = v => v !== undefined && v !== null && v !== "";
     const put = (k, v) => { if (has(v)) out[k] = v; else delete out[k]; };
-    ["name", "brand", "gold", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity"]
+    ["name", "brand", "gold", "background", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity"]
       .forEach(k => put(k, d[k]));
     ["capacity_kwh", "history_hours", "threshold"].forEach(k => put(k, has(d[k]) ? Number(d[k]) : undefined));
     if (d.palette === "green") out.palette = "green"; else delete out.palette;
@@ -752,7 +763,7 @@ class TitanStatusCardEditor extends HTMLElement {
       tscTxt("sl" + i + "_label"), tscEnt("sl" + i + "_start"), tscEnt("sl" + i + "_end")] });
     return [
       { type: "expandable", name: "", title: "Général", icon: "mdi:cog", expanded: true, schema: [
-        tscTxt("name"), tscTxt("brand"),
+        tscTxt("name"), tscTxt("brand"), tscTxt("background"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
         tscBool("show_ring"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
