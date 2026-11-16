@@ -70,7 +70,7 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 |---|---|
 | `name`, `brand` | Nom de la carte, texte en haut à droite (vide par défaut) |
 | `palette` | `gold` (défaut) ou `green` |
-| `background` | Couleur de fond de la carte (ex. `"#f3ecdc"` pour un beige). Sans cette option, le fond d'origine est conservé |
+| `background` | Couleur de fond de la carte (ex. `"#EDE8D0"` pour un beige). Sans cette option, le fond d'origine est conservé |
 | `gold` / `green` | Couleur d'accent de chaque style |
 | `soc_entity` | SOC de la batterie (obligatoire) |
 | `power_entity`, `power_charge_positive` | Puissance et son signe (positif = charge par défaut) |
