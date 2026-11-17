@@ -83,6 +83,10 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `temps` + `show_temps` | Pastilles de température |
 | `footer` | Jusqu'à 4 compteurs (`label`, `entity`, `unit`, `decimals`) |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
+| `link_compact` | `true` : tous les blocs Link sont compacts (environ 3 fois moins hauts). Désactivé par défaut. Pour un seul bloc, ajouter `compact: true` dans ce `link` |
+| `link_collapsible` | `false` supprime la flèche : les blocs Link sont toujours affichés. Repliables par défaut |
+| `link_show_bar` | `false` masque la barre de charge/décharge des blocs Link (affichée par défaut). Pour un seul bloc, ajouter `show_bar: false` dans ce `link` |
+| `link_open` | `true` : les blocs Link sont ouverts au départ (ensuite, le dernier choix de l'appareil est mémorisé) |
 | `controls` | Boutons dans l'en-tête pour commander des interrupteurs (`switch`, `input_boolean`, `light`) : `entity`, `label`, `icon`, `confirm` |
 | `planning` | Section repliable « Planning de recharge » : interrupteur, plages horaires, puissance et SOC cible (voir ci-dessous) |
 | `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs. `bar_colors.full` (optionnel) règle la couleur de la barre quand la batterie est pleine (par défaut, celle de `charge`) |
@@ -165,7 +169,7 @@ link:
 ```
 
 Le Link se déplie avec la flèche sous la carte ; le choix est retenu sur chaque appareil.
-La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`).
+La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`), plus `compact: true` pour un affichage réduit).
 
 ## Licence
 MIT
