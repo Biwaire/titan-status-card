@@ -600,7 +600,7 @@ class TitanLinkCard extends TitanStatusCard {
           overflow:hidden;border-radius:${c.embedded ? "0" : "16px"};padding:0;container-type:inline-size;
           ${c.embedded ? "box-shadow:none;border:none;" : ""}
           ${tscBg(c, dark, light)} }
-        .sd { width:56px;flex:none;background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 82%,#fff),var(--gold)) }
+        .sd { width:56px;flex:none;background:${c.embedded ? "var(--gold)" : "linear-gradient(180deg,color-mix(in srgb,var(--gold) 82%,#fff),var(--gold))"} }   /* sous une Titan : couleur pleine, identique au bas de la bande de la Titan (pas de rupture de vert) */
         .bd { flex:1;min-width:0;padding:12px 14px 10px;display:flex;flex-direction:column }
         .head { display:flex;justify-content:space-between;align-items:baseline }
         .name { font-weight:800;letter-spacing:.12em;font-size:.95rem;text-transform:uppercase }
