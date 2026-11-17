@@ -624,8 +624,9 @@ class TitanLinkCard extends TitanStatusCard {
         @container (max-width: 380px) { .soc { font-size:2.4rem } .chip { padding:2px 5px;font-size:.64rem } .bd { padding:10px 10px 8px } }
         /* option compact : bloc Link réduit (une ligne : % + pastilles, barre fine) */
         .compact { min-height:0 }
-        .compact .sd { width:12px }
-        .compact .bd { padding:7px 12px 8px }
+        .compact .sd { width:56px }   /* même largeur de bande que la Titan : les textes restent alignés */
+        .compact .bd { padding:7px 14px 8px }
+        @container (max-width: 380px) { .compact .bd { padding:7px 10px 8px } }
         .compact .row { align-items:center;margin-top:2px;gap:8px }
         .compact .soc { font-size:1.7rem }
         .compact .brand { font-size:.6rem }

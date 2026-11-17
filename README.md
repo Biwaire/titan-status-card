@@ -185,6 +185,10 @@ link:
 Le Link se déplie avec la flèche sous la carte ; le choix est retenu sur chaque appareil.
 La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`), plus `compact: true` pour un affichage réduit, `palette: green` (noir et vert), `background`, `text_color` et `border_color` ; tout est aussi dans l'éditeur visuel).
 
+## Version 2.1
+
+- Blocs Link compacts (`link_compact`) : la bande de gauche a la même largeur que celle de la Titan, et les textes sont alignés avec ceux de la Titan. La hauteur ne change pas.
+
 ## Version 2.0
 
 - Le **cercle d'état** (`show_ring`) est supprimé : l'état (CHARGE, DÉCHARGE, VEILLE) est déjà écrit sur la bande de gauche. Si ta configuration contient encore `show_ring`, l'option est simplement ignorée (l'éditeur visuel la retire à la prochaine sauvegarde).
