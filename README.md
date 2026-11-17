@@ -22,6 +22,10 @@ Blocs Link compacts (`link_compact`), avec un nom à droite (`brand`), au style 
 
 ![Blocs Link compacts, styles au choix](images/apercu-link-styles.png)
 
+Version 2.0 : entrées PV de la Titan (`pv`), vert de la barre et de la courbe au choix (`green_style`), en blanc et doré ou en noir et vert :
+
+![Titan Status Card 2.0, styles blanc et noir](images/apercu-v2-blanc-noir.png)
+
 ## Installation
 
 ### Avec HACS (dépôt personnalisé)
