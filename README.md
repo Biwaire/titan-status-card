@@ -18,6 +18,10 @@ Plusieurs modules Link peuvent être empilés (ici 5) :
 
 ![Carte avec 5 Link](images/apercu-5-links.png)
 
+Blocs Link compacts (`link_compact`), avec un nom à droite (`brand`), au style choisi (`link_palette`) : blanc et doré ou noir et vert, indépendamment de la carte :
+
+![Blocs Link compacts, styles au choix](images/apercu-link-styles.png)
+
 ## Installation
 
 ### Avec HACS (dépôt personnalisé)
@@ -84,6 +88,8 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `footer` | Jusqu'à 4 compteurs (`label`, `entity`, `unit`, `decimals`) |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
 | `link_compact` | `true` : tous les blocs Link sont compacts (environ 3 fois moins hauts). Désactivé par défaut. Pour un seul bloc, ajouter `compact: true` dans ce `link` |
+| `brand` (dans un bloc `link`) | Petit texte affiché en haut à droite du bloc Link, comme la marque de la carte principale (ex. `brand: MODULE A`) |
+| `link_palette` | Style des blocs Link : `gold` (blanc et doré) ou `green` (noir et vert). Par défaut, comme la carte ; permet par exemple des Link noirs sous une carte blanche. Pour un seul bloc, `palette` dans ce `link` |
 | `link_collapsible` | `false` supprime la flèche : les blocs Link sont toujours affichés. Repliables par défaut |
 | `link_show_bar` | `false` masque la barre de charge/décharge des blocs Link (affichée par défaut). Pour un seul bloc, ajouter `show_bar: false` dans ce `link` |
 | `link_open` | `true` : les blocs Link sont ouverts au départ (ensuite, le dernier choix de l'appareil est mémorisé) |

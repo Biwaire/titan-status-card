@@ -319,9 +319,17 @@ class TitanStatusCard extends HTMLElement {
       const lp = r.querySelector(".lp"), tb = r.querySelector(".tb");
       linksCfg.forEach(lc => {
         const lk = document.createElement("titan-link-card");
-        lk.setConfig({ theme: c.theme, gold: c.gold, state_entity: c.state_entity, power_entity: c.power_entity,
-          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, background: c.background, text_color: c.text_color, border_color: c.border_color, compact: c.link_compact, show_bar: c.link_show_bar,
-          ...lc, brand: "", embedded: true });
+        // style des Link : par défaut identique à la carte ; link_palette (ou palette dans le bloc) permet l'inverse
+        const lpal = lc.palette || c.link_palette;
+        const diff = (lpal === "green" || lpal === "gold") && lpal !== c.palette;
+        const look = diff
+          ? { palette: lpal, green: c.green }
+          : { theme: c.theme, gold: c.gold, background: c.background, text_color: c.text_color, border_color: c.border_color };
+        lk.setConfig({ state_entity: c.state_entity, power_entity: c.power_entity,
+          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, bar_colors_dark: c.bar_colors_dark,
+          compact: c.link_compact, show_bar: c.link_show_bar,
+          ...look,
+          ...lc, brand: typeof lc.brand === "string" ? lc.brand : "", embedded: true });
         lp.append(lk); this._lk.push(lk);
       });
       const apply = () => { lp.hidden = !open; if (tb) tb.classList.toggle("open", open); };
@@ -567,7 +575,7 @@ class TitanLinkCard extends TitanStatusCard {
         .bd { flex:1;min-width:0;padding:12px 14px 10px;display:flex;flex-direction:column }
         .head { display:flex;justify-content:space-between;align-items:baseline }
         .name { font-weight:800;letter-spacing:.12em;font-size:.95rem;text-transform:uppercase }
-        .brand { font-weight:800;letter-spacing:.16em;font-size:.8rem;color:var(--gold) }
+        .brand { font-weight:800;letter-spacing:.12em;font-size:.68rem;color:var(--gold) }
         .row { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-top:6px }
         .soc { font-size:3rem;font-weight:800;line-height:1;color:var(--pc,var(--gold));display:flex;align-items:baseline }
         .soc small { font-size:1.1rem;font-weight:600;margin-left:3px }
@@ -591,6 +599,7 @@ class TitanLinkCard extends TitanStatusCard {
         .compact .bd { padding:7px 12px 8px }
         .compact .row { align-items:center;margin-top:2px;gap:8px }
         .compact .soc { font-size:1.7rem }
+        .compact .brand { font-size:.6rem }
         .compact .soc small { font-size:.8rem }
         .compact .chips { flex-direction:row;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px;margin-top:0;min-width:0 }
         .compact .chip { padding:1px 6px;font-size:.68rem }
@@ -655,7 +664,7 @@ customElements.define("titan-link-card", TitanLinkCard);
 const TSC_N = { link: 5, controls: 6, slots: 4 };
 const TSC_LABELS = {
   name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
-  show_ring: "Cercle d'état à droite", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  show_ring: "Cercle d'état à droite", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
@@ -664,7 +673,7 @@ const TSC_LABELS = {
   pl_name: "Titre de la section", pl_enable: "Interrupteur du planning", pl_active: "Indicateur « En cours » (optionnel)",
   pl_power: "Puissance de recharge", pl_soc: "SOC cible", pl_warn: "Seuil d'avertissement (W)",
   pl_position: "Position de la section", pl_end: "Action de fin (optionnel)",
-  lk_soc: "SOC", lk_temp: "Température", lk_cycles: "Cycles", lk_name: "Nom",
+  lk_soc: "SOC", lk_temp: "Température", lk_cycles: "Cycles", lk_name: "Nom", lk_brand: "Texte à droite (optionnel)",
 };
 const TSC_HELP = {
   background: "Exemple : #EDE8D0 (beige). Vide = fond d'origine",
@@ -698,7 +707,7 @@ class TitanStatusCardEditor extends HTMLElement {
     const links = Array.isArray(c.link) ? c.link : (c.link && typeof c.link === "object" ? [c.link] : []);
     for (let i = 0; i < TSC_N.link; i++) {
       const o = links[i] || {};
-      d["lk" + i + "_name"] = o.name; d["lk" + i + "_soc"] = o.soc_entity; d["lk" + i + "_temp"] = o.temp_entity; d["lk" + i + "_cycles"] = o.cycles_entity;
+      d["lk" + i + "_name"] = o.name; d["lk" + i + "_soc"] = o.soc_entity; d["lk" + i + "_temp"] = o.temp_entity; d["lk" + i + "_cycles"] = o.cycles_entity; d["lk" + i + "_brand"] = o.brand;
     }
     const ct = Array.isArray(c.controls) ? c.controls : [];
     for (let i = 0; i < TSC_N.controls; i++) {
@@ -720,6 +729,7 @@ class TitanStatusCardEditor extends HTMLElement {
     d.eta_hide_idle = c.eta_hide_idle !== false;
     d.show_label = c.show_label !== false;
     d.link_compact = c.link_compact === true;
+    d.link_palette = c.link_palette === "gold" || c.link_palette === "green" ? c.link_palette : "same";
     d.link_collapsible = c.link_collapsible !== false;
     d.link_show_bar = c.link_show_bar !== false;
     d.link_open = c.link_open === true;
@@ -739,6 +749,7 @@ class TitanStatusCardEditor extends HTMLElement {
     if (d.eta_hide_idle === false) out.eta_hide_idle = false; else delete out.eta_hide_idle;
     if (d.show_label === false) out.show_label = false; else delete out.show_label;
     if (d.link_compact === true) out.link_compact = true; else delete out.link_compact;
+    if (d.link_palette === "gold" || d.link_palette === "green") out.link_palette = d.link_palette; else delete out.link_palette;
     if (d.link_collapsible === false) out.link_collapsible = false; else delete out.link_collapsible;
     if (d.link_show_bar === false) out.link_show_bar = false; else delete out.link_show_bar;
     if (d.link_open === true) out.link_open = true; else delete out.link_open;
@@ -751,10 +762,11 @@ class TitanStatusCardEditor extends HTMLElement {
       if (has(d["lk" + i + "_soc"])) o.soc_entity = d["lk" + i + "_soc"];
       if (has(d["lk" + i + "_temp"])) o.temp_entity = d["lk" + i + "_temp"];
       if (has(d["lk" + i + "_cycles"])) o.cycles_entity = d["lk" + i + "_cycles"];
+      if (has(d["lk" + i + "_brand"])) o.brand = d["lk" + i + "_brand"];
       const prev = (Array.isArray(base.link) ? base.link[i] : (i === 0 && base.link && typeof base.link === "object" ? base.link : null)) || {};
-      if (Object.keys(o).length) links.push({ ...prev, ...o, ...(has(d["lk" + i + "_name"]) ? {} : { name: undefined }) });
+      if (Object.keys(o).length) links.push({ ...prev, ...o, ...(has(d["lk" + i + "_name"]) ? {} : { name: undefined }), ...(has(d["lk" + i + "_brand"]) ? {} : { brand: undefined }) });
     }
-    links.forEach(o => { if (o.name === undefined) delete o.name; });
+    links.forEach(o => { if (o.name === undefined) delete o.name; if (o.brand === undefined) delete o.brand; });
     if (!links.length) delete out.link; else out.link = links.length === 1 && !Array.isArray(base.link) ? links[0] : links;
     // Boutons de commande
     const ctl = [];
@@ -795,7 +807,7 @@ class TitanStatusCardEditor extends HTMLElement {
     const T = "input_datetime", S = ["switch", "input_boolean", "light"];
     const links = [], ctls = [], slots = [];
     for (let i = 0; i < TSC_N.link; i++) links.push({ type: "expandable", name: "", title: "Link " + (i + 1), schema: [
-      tscTxt("lk" + i + "_name"), tscEnt("lk" + i + "_soc"), tscEnt("lk" + i + "_temp"), tscEnt("lk" + i + "_cycles")] });
+      tscTxt("lk" + i + "_name"), tscEnt("lk" + i + "_soc"), tscEnt("lk" + i + "_temp"), tscEnt("lk" + i + "_cycles"), tscTxt("lk" + i + "_brand")] });
     for (let i = 0; i < TSC_N.controls; i++) ctls.push({ type: "expandable", name: "", title: "Bouton " + (i + 1), schema: [
       tscEnt("ct" + i + "_entity", S), tscTxt("ct" + i + "_label"), { name: "ct" + i + "_icon", selector: { icon: {} } }, tscBool("ct" + i + "_confirm")] });
     for (let i = 0; i < TSC_N.slots; i++) slots.push({ type: "expandable", name: "", title: "Plage " + (i + 1), expanded: i < 2, schema: [
@@ -804,7 +816,7 @@ class TitanStatusCardEditor extends HTMLElement {
       { type: "expandable", name: "", title: "Général", icon: "mdi:cog", expanded: true, schema: [
         tscTxt("name"), tscTxt("brand"), tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
-        tscBool("show_ring"), tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        tscBool("show_ring"), tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
         tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
@@ -868,12 +880,12 @@ class TitanLinkCardEditor extends TitanStatusCardEditor {
   _flatten(c) { return { ...c, compact: c.compact === true, show_bar: c.show_bar !== false }; }
   _unflatten(d, base) {
     const out = { ...base };
-    ["name", "soc_entity", "temp_entity", "cycles_entity"].forEach(k => { if (d[k] !== undefined && d[k] !== null && d[k] !== "") out[k] = d[k]; else delete out[k]; });
+    ["name", "brand", "soc_entity", "temp_entity", "cycles_entity"].forEach(k => { if (d[k] !== undefined && d[k] !== null && d[k] !== "") out[k] = d[k]; else delete out[k]; });
     if (d.compact === true) out.compact = true; else delete out.compact;
     if (d.show_bar === false) out.show_bar = false; else delete out.show_bar;
     return out;
   }
-  _schema() { return [tscTxt("name"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity"), tscBool("compact"), tscBool("show_bar")]; }
+  _schema() { return [tscTxt("name"), tscTxt("brand"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity"), tscBool("compact"), tscBool("show_bar")]; }
 }
 TSC_LABELS.compact = "Affichage compact (bloc plus petit)"; TSC_LABELS.temp_entity = "Température"; TSC_LABELS.cycles_entity = "Cycles";
 
