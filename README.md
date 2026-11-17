@@ -66,7 +66,7 @@ Seul `soc_entity` est obligatoire.
 
 ## Éditeur visuel
 
-La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de cartes (« Titan Status Card »), ou ouvre ta carte puis **Modifier**. L'éditeur propose des sections repliables : Général, Entités (avec recherche d'entités), Boutons de commande, Planning de recharge (plages, puissance, SOC cible, position) et Modules Link (jusqu'à 5). Avec l'intégration izypower_titan, choisis le SOC (`…_pile_average`) : la puissance (`…_ac_input_and_output`), l'état (`…_battery_state`) et le mode (`…_working_mode`) sont remplis automatiquement s'ils existent. Chaque champ affiche un exemple de nom d'entité. Les options absentes de l'éditeur (`pv`, `temps`, `footer`, couleurs…) restent dans le YAML et sont conservées.
+La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de cartes (« Titan Status Card »), ou ouvre ta carte puis **Modifier**. L'éditeur propose des sections repliables : Général, Entités (avec recherche d'entités), Boutons de commande, Entrées PV (onduleurs), Planning de recharge (plages, puissance, SOC cible, position) et Modules Link (jusqu'à 5). Avec l'intégration izypower_titan, choisis le SOC (`…_pile_average`) : la puissance (`…_ac_input_and_output`), l'état (`…_battery_state`) et le mode (`…_working_mode`) sont remplis automatiquement s'ils existent. Chaque champ affiche un exemple de nom d'entité. Les options absentes de l'éditeur (`temps`, `footer`, couleurs…) restent dans le YAML et sont conservées.
 
 ## Options principales
 
@@ -76,7 +76,7 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `palette` | `gold` (défaut) ou `green` |
 | `background` | Couleur de fond de la carte (ex. `"#EDE8D0"` pour un beige). Sans cette option, le fond d'origine est conservé |
 | `text_color` | Couleur des textes (ex. `"#333333"`). Sans cette option, la couleur d'origine est conservée |
-| `border_color` | Couleur des cadres : pastilles, cercle d'état, boutons (ex. `"#39ff14"`). Sans cette option, la couleur d'accent est utilisée |
+| `border_color` | Couleur des cadres : pastilles et boutons (ex. `"#39ff14"`). Sans cette option, la couleur d'accent est utilisée |
 | `gold` / `green` | Couleur d'accent de chaque style |
 | `soc_entity` | SOC de la batterie (obligatoire) |
 | `power_entity`, `power_charge_positive` | Puissance et son signe (positif = charge par défaut) |
@@ -84,20 +84,24 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `floor_entity` | SOC minimum : barre et pourcentage passent en rouge en dessous |
 | `mode_entity`, `mode_labels` | Mode de travail et traduction des libellés |
 | `days_entity`, `days_label` | Jours depuis la dernière charge complète |
-| `temps` + `show_temps` | Pastilles de température |
+| `temps` + `show_temps` | Pastilles de température (jusqu'à 4). Dans l'éditeur : champ « Température Titan » en haut de la section Entités |
 | `footer` | Jusqu'à 4 compteurs (`label`, `entity`, `unit`, `decimals`) |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
 | `link_compact` | `true` : tous les blocs Link sont compacts (environ 3 fois moins hauts). Désactivé par défaut. Pour un seul bloc, ajouter `compact: true` dans ce `link` |
 | `brand` (dans un bloc `link`) | Petit texte affiché en haut à droite du bloc Link, comme la marque de la carte principale (ex. `brand: MODULE A`) |
 | `link_palette` | Style des blocs Link : `gold` (blanc et doré) ou `green` (noir et vert). Par défaut, comme la carte ; permet par exemple des Link noirs sous une carte blanche. Pour un seul bloc, `palette` dans ce `link` |
+| `green_style` | `fluo` (vert vif `#39ff14`) ou `normal` (vert plus doux, par défaut) : règle uniquement le vert de la **barre de charge** (y compris barre pleine) et de la **courbe**, en clair comme en sombre, et dans les blocs Link. La bande de gauche, les chiffres et les cadres gardent leur couleur. Un choix explicite l'emporte sur `bar_colors`, `bar_colors_dark` et `curve_color`. Aussi disponible sur la carte Link seule |
 | `link_collapsible` | `false` supprime la flèche : les blocs Link sont toujours affichés. Repliables par défaut |
 | `link_show_bar` | `false` masque la barre de charge/décharge des blocs Link (affichée par défaut). Pour un seul bloc, ajouter `show_bar: false` dans ce `link` |
 | `link_open` | `true` : les blocs Link sont ouverts au départ (ensuite, le dernier choix de l'appareil est mémorisé) |
 | `controls` | Boutons dans l'en-tête pour commander des interrupteurs (`switch`, `input_boolean`, `light`) : `entity`, `label`, `icon`, `confirm` |
 | `planning` | Section repliable « Planning de recharge » : interrupteur, plages horaires, puissance et SOC cible (voir ci-dessous) |
 | `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs. `bar_colors.full` (optionnel) règle la couleur de la barre quand la batterie est pleine (par défaut, celle de `charge`) |
-| `show_ring` | Cercle d'état à droite (désactivé par défaut), dynamique : sa taille s'adapte à la largeur de la carte (PC, tablette, téléphone) et il ne déborde plus sur la courbe |
 | `show_eta` | `false` masque l'horloge / heure estimée en haut à gauche (affichée par défaut) |
+| `pv` | Entrées PV (onduleurs) de la Titan, jusqu'à 4, affichées en pastilles sous les kWh : `- entity: sensor.…_dc_input_power_1` (option `label` pour changer « P1 »). L'éditeur les remplit tout seul quand tu choisis le SOC |
+| `show_pv` | `false` masque les pastilles PV sans effacer les entités (affichées par défaut dès qu'`pv` est renseigné) |
+| `pv_position` | `right` affiche les entrées PV à droite, avec les autres pastilles (par défaut : `left`, sous les kWh) |
+| `pv_dropdown` | `true` : les entrées PV sont dans un petit menu déroulant « PV » (flèche), à gauche comme à droite. Le dernier choix est mémorisé sur l'appareil. `pv_open: true` pour l'ouvrir au départ |
 | `eta_hide_idle` | L'heure estimée se masque automatiquement quand la batterie est en veille. `false` pour la garder toujours visible (affichée par défaut `--:--`) |
 | `show_label` | `false` masque le texte vertical à gauche (VEILLE, CHARGE…). Affiché par défaut |
 
@@ -175,7 +179,12 @@ link:
 ```
 
 Le Link se déplie avec la flèche sous la carte ; le choix est retenu sur chaque appareil.
-La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`), plus `compact: true` pour un affichage réduit).
+La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`), plus `compact: true` pour un affichage réduit, `palette: green` (noir et vert), `background`, `text_color` et `border_color` ; tout est aussi dans l'éditeur visuel).
+
+## Version 2.0
+
+- Le **cercle d'état** (`show_ring`) est supprimé : l'état (CHARGE, DÉCHARGE, VEILLE) est déjà écrit sur la bande de gauche. Si ta configuration contient encore `show_ring`, l'option est simplement ignorée (l'éditeur visuel la retire à la prochaine sauvegarde).
+- Tout le reste est inchangé : tes cartes continuent de fonctionner sans modification.
 
 ## Licence
 MIT

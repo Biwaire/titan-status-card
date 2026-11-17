@@ -2,6 +2,17 @@
 // ignore les valeurs vides ou false d'un réglage (l'éditeur Home Assistant en laisse parfois)
 const clean = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v));
 /* Fond et couleur du texte de la carte ; l'option background impose la couleur de fond */
+/* green_style : "fluo" (vert vif) ou "normal" (vert doux), uniquement pour la barre de charge et la courbe ; le reste (bande, chiffres, cadres) garde la couleur d'accent */
+const TSC_GREEN = { fluo: { accent: "#39ff14", bar: "#39ff14", barDark: "#39ff14", curve: "#39ff14" }, normal: { accent: "#2fd067", bar: "#3fbf6a", barDark: "#2fd067", curve: "#3fbf6a" } };
+const tscGreen = v => TSC_GREEN[v] || null;
+/* Verts réglables : barre de charge, barre pleine, courbe. Un choix explicite (fluo / normal) l'emporte sur les couleurs saisies à la main ; sans choix, vert normal + réglages manuels éventuels */
+const tscGreenCfg = config => {
+  const ex = tscGreen(config.green_style), gs = ex || TSC_GREEN.normal;
+  const bc = { charge: gs.bar, discharge: "#2f8fe0", static: "#2f8fe0", low: "#e5484d", ...clean(config.bar_colors) };
+  const bd = { charge: gs.barDark, ...clean(config.bar_colors_dark) };
+  if (ex) { bc.charge = bc.full = gs.bar; bd.charge = bd.full = gs.barDark; }
+  return { accent: config.green || TSC_GREEN.normal.accent, curve: ex ? (config.palette === "green" ? gs.barDark : gs.curve) : (config.curve_color || (config.palette === "green" ? gs.barDark : gs.curve)), bar_colors: bc, bar_colors_dark: bd };
+};
 const tscCol = v => (typeof v === "string" ? v.replace(/[;{}<>]/g, "").trim() : "");
 function tscBg(c, dark, light) {
   const txt = tscCol(c.text_color) || (dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)");
@@ -13,12 +24,11 @@ function tscBg(c, dark, light) {
 class TitanStatusCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.soc_entity) throw new Error("soc_entity est obligatoire");
+    const G = tscGreenCfg(config);
     this._c = {
       name: "Titan",
       brand: "",
       gold: "#c8921b",             // couleur du bandeau gauche et de la marque
-      curve_color: "#3fbf6a",      // couleur de la courbe
-      show_ring: false,            // cercle d'état à droite
       show_temps: false,           // pastilles de température à droite
       theme: "light",              // "light" (carte blanche) ou "auto" (couleurs du thème HA)
       power_charge_positive: true,
@@ -28,10 +38,13 @@ class TitanStatusCard extends HTMLElement {
       ...config,
       // palette : "gold" (blanc et doré) ou "green" (noir et vert)
       palette: config.palette === "green" ? "green" : "gold",
-      gold: config.palette === "green" ? (config.green || "#2fd067") : (config.gold || "#c8921b"),
+      gold: config.palette === "green" ? G.accent : (config.gold || "#c8921b"),
+      green: G.accent,
+      bar_colors_dark: G.bar_colors_dark,
+      curve_color: G.curve,
       theme: config.palette === "green" ? "black" : (config.theme || "light"),
       colors: { charge: "#2e9e5b", discharge: "#f08a1c", static: "#7d8794", ...clean(config.colors) },
-      bar_colors: { charge: "#3fbf6a", discharge: "#2f8fe0", static: "#2f8fe0", low: "#e5484d", ...clean(config.bar_colors) },
+      bar_colors: G.bar_colors,
       labels: { charge: "CHARGE", discharge: "DÉCHARGE", static: "VEILLE", ...clean(config.labels) },
       pv: Array.isArray(config.pv) ? config.pv.slice(0, 4) : [],
       temps: Array.isArray(config.temps) ? config.temps.slice(0, 4) : [],
@@ -70,7 +83,13 @@ class TitanStatusCard extends HTMLElement {
     const c = this._c, dark = c.theme === "black", light = c.theme !== "auto" && !dark;
     const linksCfg = (Array.isArray(c.link) ? c.link : c.link ? [c.link] : []).filter(o => o && typeof o === "object");
     const tc = tscCol(c.text_color) || (dark ? "#f1f5f2" : light ? "#111" : "var(--primary-text-color)");
-    const pv = c.pv.map((p, i) => `<div class="pv"><ha-icon icon="mdi:solar-panel-large"></ha-icon><span class="pvv" data-i="${i}">—</span></div>`).join("");
+    // entrées PV (onduleurs) : pastilles « P1 120 W » ; masquées avec show_pv: false
+    const pvRight = c.pv_position === "right";
+    const pv = c.show_pv === false ? "" : c.pv.map((p, i) => `<div class="pvc"><b>${this._esc(p.label || "P" + (i + 1))}</b><span class="pvv" data-i="${i}">—</span></div>`).join("");
+    // fixe, ou en menu déroulant (flèche) ; à gauche sous les kWh ou à droite avec les pastilles
+    const pvBlock = !pv ? "" : c.pv_dropdown
+      ? `<div class="pvd${pvRight ? " r" : ""}"><button class="pvt" aria-label="Afficher les entrées PV"><ha-icon icon="mdi:solar-power"></ha-icon><span>PV</span><ha-icon class="pvch" icon="mdi:chevron-down"></ha-icon></button><div class="pvs${pvRight ? " r" : ""}" hidden>${pv}</div></div>`
+      : `<div class="pvs${pvRight ? " r" : ""}">${pv}</div>`;
     const temps = c.temps.map((t, i) => {
       const ic = t.icon || (/🌡/.test(t.label || "") ? "mdi:thermometer" : "");
       return `<div class="chip">${ic ? `<ha-icon icon="${this._esc(ic)}"></ha-icon>` : `<b>${this._esc(t.label || "")}</b>`}<span class="tv" data-i="${i}">—</span></div>`;
@@ -101,10 +120,9 @@ class TitanStatusCard extends HTMLElement {
         ha-card { display:block;overflow:hidden;border-radius:16px;container-type:inline-size;
           ${tscBg(c, dark, light)} }
         .wrap { display:flex;min-height:190px }
-        .ringed .wrap { min-height:204px }
-        .ctl { display:flex;gap:8px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
-        .pl { border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
-        .pl.top { border-top:0;border-bottom:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
+        .ctl { display:flex;gap:8px;padding:8px 14px;border-top:1px solid color-mix(in srgb,var(--bd,var(--gold)) 25%,transparent) }
+        .pl { border-top:1px solid color-mix(in srgb,var(--bd,var(--gold)) 25%,transparent) }
+        .pl.top { border-top:0;border-bottom:1px solid color-mix(in srgb,var(--bd,var(--gold)) 25%,transparent) }
         .ph { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px }
         .pt { all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;min-width:0;font-size:.66rem;font-weight:800;
           letter-spacing:.1em;text-transform:uppercase;color:${tc} }
@@ -149,11 +167,11 @@ class TitanStatusCard extends HTMLElement {
         .cb.ask { border-style:dashed;animation:askp 1s ease-in-out infinite }
         .cb.off { opacity:.4;pointer-events:none }
         @keyframes askp { 50% { opacity:.55 } }
-        .tg { display:flex;justify-content:center;height:24px;border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
+        .tg { display:flex;justify-content:center;height:24px;border-top:1px solid color-mix(in srgb,var(--bd,var(--gold)) 25%,transparent) }
         .tb { all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;width:64px;height:24px;color:var(--gold) }
         .tb ha-icon { --mdc-icon-size:22px;transition:transform .25s }
         .tb.open ha-icon { transform:rotate(180deg) }
-        .lp { border-top:1px solid color-mix(in srgb,var(--gold) 25%,transparent) }
+        .lp { border-top:1px solid color-mix(in srgb,var(--bd,var(--gold)) 25%,transparent) }
         .side { width:56px;flex:none;display:flex;flex-direction:column;align-items:center;
           justify-content:space-between;padding:10px 0;color:#111;
           background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 82%,#fff),var(--gold));position:relative }
@@ -181,18 +199,22 @@ class TitanStatusCard extends HTMLElement {
         .soc { font-size:3rem;font-weight:800;line-height:1;color:var(--pc,var(--gold));display:flex;align-items:baseline }
         .soc small { font-size:1.1rem;font-weight:600;margin-left:3px }
         .kwh { margin-top:4px;font-size:.95rem;font-weight:600 }
-        .pvs { display:flex;gap:10px;margin-top:10px }
-        .pv { display:flex;flex-direction:column;align-items:center;font-size:.62rem }
-        .pv ha-icon { --mdc-icon-size:26px }
-        .ring { --rs:clamp(42px,11cqw,60px);width:var(--rs);height:var(--rs);flex:none;border-radius:50%;border:3px solid var(--bd,var(--gold));
-          display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-          box-shadow:0 0 10px color-mix(in srgb,var(--gold) 30%,transparent);color:var(--gold) }
-        .ring span { color:${tc} }
-        .ring ha-icon { --mdc-icon-size:calc(var(--rs)*.4) }
-        .ring span { font-size:calc(var(--rs)*.2);font-weight:700;letter-spacing:.06em }
-        .chips { display:flex;flex-direction:column;gap:6px;align-items:stretch }
+        .pvs { display:flex;flex-wrap:wrap;gap:4px;margin-top:8px }
+        .pvc { display:flex;align-items:center;gap:4px;border:1px solid var(--bd,var(--gold));border-radius:999px;padding:1px 7px;font-size:clamp(.54rem,1.9cqw,.66rem);font-weight:600;white-space:nowrap }
+        .pvc b { color:var(--gold);font-weight:800 }
+        .pvs[hidden] { display:none }
+        .pvs.r { display:grid;grid-template-columns:repeat(2,auto);justify-content:end;margin-top:0 }
+        .pvd { display:flex;flex-direction:column;gap:6px;margin-top:8px }
+        .pvd.r { margin-top:0;align-items:stretch }
+        .pvt { all:unset;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:3px;border:1.5px solid var(--bd,var(--gold));color:${tc};border-radius:8px;padding:3px 8px;font-size:.7rem;font-weight:700;align-self:flex-start }
+        .pvd.r .pvt { align-self:stretch }
+        .pvt ha-icon { --mdc-icon-size:16px;color:var(--gold) }
+        .pvt .pvch { transition:transform .2s }
+        .pvd.open .pvch { transform:rotate(180deg) }
+        .haspv .foot { padding-top:66px }   /* la place sous les pastilles PV suit leur hauteur : la courbe ne les recouvre jamais */
+        .chips { display:flex;flex-direction:column;gap:6px;align-items:stretch;width:clamp(128px,38cqw,190px);flex:none }   /* largeur fixe : un texte long ne pousse plus les pastilles PV */
         .chip { border:1.5px solid var(--bd,var(--gold));color:${tc};border-radius:8px;display:flex;align-items:center;justify-content:center;gap:3px;
-          padding:3px 8px;font-size:.72rem;font-weight:600;white-space:nowrap }
+          padding:3px 8px;font-size:.72rem;font-weight:600;white-space:normal;text-align:center;line-height:1.2 }
         .chip ha-icon { --mdc-icon-size:16px;color:var(--gold) }
         .chip.mode { font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:2px 8px }
         svg.spark { position:absolute;left:0;right:0;bottom:34px;width:100%;height:46px;z-index:0;pointer-events:none }
@@ -208,7 +230,6 @@ class TitanStatusCard extends HTMLElement {
           .inhead .cb ha-icon { --mdc-icon-size:16px }
         }
         @container (max-width: 380px) {
-          .ringed .wrap { min-height:190px }
           .soc { font-size:2.4rem }
           .chip { padding:2px 5px;font-size:.64rem }
           .main { padding:10px 10px 8px }
@@ -221,7 +242,7 @@ class TitanStatusCard extends HTMLElement {
           .fo i { font-size:.46rem;padding:1px 2px }
         }
       </style>
-      <ha-card class="${c.show_ring ? "ringed" : ""}">
+      <ha-card class="${pv ? "haspv" : ""}">
         ${plTop ? plHtml : ""}
         <div class="wrap">
           <div class="side">
@@ -235,11 +256,10 @@ class TitanStatusCard extends HTMLElement {
               <div class="left">
                 <div class="soc"><span class="socv">—</span><small>%</small></div>
                 <div class="kwh">—</div>
-                ${pv ? `<div class="pvs">${pv}</div>` : ""}
+                ${pvBlock && !pvRight ? pvBlock : ""}
               </div>
-              ${c.show_ring ? `<div class="ring"><ha-icon icon="mdi:battery"></ha-icon><span class="rl">—</span></div>` : ""}
-              ${(temps && c.show_temps) || c.mode_entity || c.days_entity
-                ? `<div class="chips">${c.mode_entity ? `<div class="chip mode"><span class="mv">—</span></div>` : ""}${c.days_entity ? `<div class="chip mode"><span class="dv">—</span></div>` : ""}${c.show_temps ? temps : ""}</div>` : ""}
+              ${(temps && c.show_temps) || c.mode_entity || c.days_entity || (pvBlock && pvRight)
+                ? `<div class="chips">${c.mode_entity ? `<div class="chip mode"><span class="mv">—</span></div>` : ""}${c.days_entity ? `<div class="chip mode"><span class="dv">—</span></div>` : ""}${c.show_temps ? temps : ""}${pvRight ? pvBlock : ""}</div>` : ""}
             </div>
             <svg class="spark" viewBox="0 0 300 46" preserveAspectRatio="none">
               <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
@@ -261,11 +281,20 @@ class TitanStatusCard extends HTMLElement {
       card: r.querySelector("ha-card"), side: r.querySelector(".side"), barBox: r.querySelector(".bar"),
       etav: r.querySelector(".etav"), eta: r.querySelector(".eta"), vt: r.querySelector(".vt"), bar: r.querySelector(".bar i"),
       pwv: r.querySelector(".pwv"), socv: r.querySelector(".socv"), kwh: r.querySelector(".kwh"),
-      ring: r.querySelector(".ring"), ringIcon: r.querySelector(".ring ha-icon"), rl: r.querySelector(".rl"),
+
       mv: r.querySelector(".mv"), dv: r.querySelector(".dv"),
       pv: [...r.querySelectorAll(".pvv")], tv: [...r.querySelectorAll(".tv")], fv: [...r.querySelectorAll(".fv")],
       sa: r.querySelector(".sa"), sl: r.querySelector(".sl"), cb: [...r.querySelectorAll(".cb")],
     };
+    const pvt = r.querySelector(".pvt"), pvd = r.querySelector(".pvd");
+    if (pvt && pvd) {
+      const pvs = pvd.querySelector(".pvs"), key = "titan-pv-" + c.soc_entity;
+      let open = c.pv_open === true;
+      try { const v = localStorage.getItem(key); if (v !== null) open = v === "1"; } catch (err) { /* ignore */ }
+      const apply = () => { pvs.hidden = !open; pvd.classList.toggle("open", open); };
+      apply();
+      pvt.addEventListener("click", () => { open = !open; apply(); try { localStorage.setItem(key, open ? "1" : "0"); } catch (err) { /* ignore */ } });
+    }
     this._armed = -1;
     this._e.cb.forEach((b, i) => b.addEventListener("click", () => {
       const o = c.controls[i];
@@ -326,7 +355,7 @@ class TitanStatusCard extends HTMLElement {
           ? { palette: lpal, green: c.green }
           : { theme: c.theme, gold: c.gold, background: c.background, text_color: c.text_color, border_color: c.border_color };
         lk.setConfig({ state_entity: c.state_entity, power_entity: c.power_entity,
-          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, bar_colors_dark: c.bar_colors_dark,
+          power_charge_positive: c.power_charge_positive, threshold: c.threshold, bar_colors: c.bar_colors, bar_colors_dark: c.bar_colors_dark, green_style: c.green_style,
           compact: c.link_compact, show_bar: c.link_show_bar,
           ...look,
           ...lc, brand: typeof lc.brand === "string" ? lc.brand : "", embedded: true });
@@ -437,7 +466,7 @@ class TitanStatusCard extends HTMLElement {
     const floorV = this._num(c.floor_entity);
     const low = Number.isFinite(soc) && Number.isFinite(floorV) && soc < floorV;
     const bcs = c.theme === "black"
-      ? { charge: "#a6ffc4", discharge: "#58b0ff", static: "#58b0ff", low: "#ff5a5f", ...clean(c.bar_colors_dark) }
+      ? { charge: "#2fd067", discharge: "#58b0ff", static: "#58b0ff", low: "#ff5a5f", ...clean(c.bar_colors_dark) }
       : c.bar_colors;
     // batterie pleine (100 %) et pas en décharge : barre verte fixe, sans balayage lumineux
     const full = Number.isFinite(soc) && soc >= 99.5 && kind !== "discharge";
@@ -454,9 +483,6 @@ class TitanStatusCard extends HTMLElement {
     if (!Number.isFinite(stored) && Number.isFinite(soc)) stored = soc / 100 * c.capacity_kwh;
     e.kwh.textContent = Number.isFinite(stored) ? this._fmt(stored, 2) + " kWh" : "—";
 
-    if (e.ringIcon) e.ringIcon.setAttribute("icon", kind === "charge" ? "mdi:battery-charging"
-      : kind === "discharge" ? "mdi:battery-arrow-down" : "mdi:battery");
-    if (e.rl) e.rl.textContent = c.labels[kind];
 
     // durée estimée : jusqu'au plancher (décharge) ou à 100 % (charge)
     let eta = "--:--";
@@ -483,7 +509,7 @@ class TitanStatusCard extends HTMLElement {
 
     c.pv.forEach((x, i) => {
       const v = this._num(x.entity);
-      if (e.pv[i]) e.pv[i].textContent = Number.isFinite(v) ? this._fmt(v, 0) + "W" : "—";
+      if (e.pv[i]) e.pv[i].textContent = Number.isFinite(v) ? this._fmt(v, 0) + " W" : "—";
     });
     c.temps.forEach((x, i) => {
       const v = this._num(x.entity);
@@ -541,6 +567,7 @@ class TitanStatusCard extends HTMLElement {
 class TitanLinkCard extends TitanStatusCard {
   setConfig(config) {
     if (!config || !config.soc_entity) throw new Error("soc_entity est obligatoire");
+    const G = tscGreenCfg(config);
     this._c = {
       name: "Link",
       brand: "",
@@ -551,9 +578,11 @@ class TitanLinkCard extends TitanStatusCard {
       ...config,
       // palette : "gold" (blanc et doré) ou "green" (noir et vert)
       palette: config.palette === "green" ? "green" : "gold",
-      gold: config.palette === "green" ? (config.green || "#2fd067") : (config.gold || "#c8921b"),
+      gold: config.palette === "green" ? G.accent : (config.gold || "#c8921b"),
+      green: G.accent,
+      bar_colors_dark: G.bar_colors_dark,
       theme: config.palette === "green" ? "black" : (config.theme || "light"),
-      bar_colors: { charge: "#3fbf6a", discharge: "#2f8fe0", static: "#2f8fe0", low: "#e5484d", ...clean(config.bar_colors) },
+      bar_colors: G.bar_colors,
     };
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._build();
@@ -639,9 +668,9 @@ class TitanLinkCard extends TitanStatusCard {
     const kind = this._kind(p);
     const full = Number.isFinite(soc) && soc >= 99.5 && kind !== "discharge";
     const bcs = c.theme === "black"
-      ? { charge: "#a6ffc4", ...clean(c.bar_colors_dark) }
+      ? { charge: "#2fd067", ...clean(c.bar_colors_dark) }
       : c.bar_colors;
-    e.card.style.setProperty("--bc", low ? c.bar_colors.low : full ? (bcs.full || bcs.charge || c.bar_colors.charge) : c.bar_colors[kind]);
+    e.card.style.setProperty("--bc", low ? c.bar_colors.low : full ? (bcs.full || bcs.charge || c.bar_colors.charge) : (kind === "charge" && bcs.charge) || c.bar_colors[kind]);
     e.card.style.setProperty("--pc", low ? c.bar_colors.low : c.gold);
     e.track.className = "track " + (full ? "static full" : kind);
     e.socv.textContent = Number.isFinite(soc) ? this._fmt(soc, 0) : "—";
@@ -661,10 +690,10 @@ customElements.define("titan-status-card", TitanStatusCard);
 customElements.define("titan-link-card", TitanLinkCard);
 
 /* ===== Éditeur visuel (interface de configuration de la carte) ===== */
-const TSC_N = { link: 5, controls: 6, slots: 4 };
+const TSC_N = { link: 5, controls: 6, slots: 4, pv: 4, temps: 1 };
 const TSC_LABELS = {
-  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
-  show_ring: "Cercle d'état à droite", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", green_style: "Vert de la barre de charge et de la courbe", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
+  show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", show_pv: "Afficher les entrées PV (onduleurs)", pv_position: "Position des entrées PV", pv_dropdown: "Entrées PV en menu déroulant (flèche)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
@@ -678,7 +707,8 @@ const TSC_LABELS = {
 const TSC_HELP = {
   background: "Exemple : #EDE8D0 (beige). Vide = fond d'origine",
   text_color: "Exemple : #333333. Vide = couleur d'origine",
-  border_color: "Cadres des pastilles, du cercle et des boutons. Exemple : #39ff14. Vide = couleur d'accent",
+  green_style: "Par défaut = vert normal. Fluo = vert vif (#39ff14), uniquement pour la barre de charge et la courbe. Un choix fluo/normal l'emporte sur les couleurs saisies à la main (bar_colors, curve_color…)",
+  border_color: "Cadres des pastilles et des boutons. Exemple : #39ff14. Vide = couleur d'accent",
   soc_entity: "Exemple : …_pile_average", power_entity: "Exemple : …_ac_input_and_output (positif = charge)",
   state_entity: "Exemple : …_battery_state", mode_entity: "Exemple : …_working_mode",
   floor_entity: "Exemple : cluster_soc_security_esp", days_entity: "Exemple : …_jours_depuis_charge_complete",
@@ -724,11 +754,17 @@ class TitanStatusCardEditor extends HTMLElement {
     }
     d.controls_position = c.controls_position === "bottom" ? "bottom" : "top";
     d.palette = c.palette === "green" ? "green" : "gold";
+    d.green_style = c.green_style === "fluo" || c.green_style === "normal" ? c.green_style : "default";
     if (c.power_charge_positive === undefined) d.power_charge_positive = true;
     d.show_eta = c.show_eta !== false;
     d.eta_hide_idle = c.eta_hide_idle !== false;
     d.show_label = c.show_label !== false;
     d.link_compact = c.link_compact === true;
+    d.show_pv = c.show_pv !== false;
+    d.pv_position = c.pv_position === "right" ? "right" : "left";
+    d.pv_dropdown = c.pv_dropdown === true;
+    for (let i = 0; i < TSC_N.pv; i++) d["pv" + i + "_entity"] = (Array.isArray(c.pv) && c.pv[i] || {}).entity;
+    for (let i = 0; i < TSC_N.temps; i++) d["tp" + i + "_entity"] = (Array.isArray(c.temps) && c.temps[i] || {}).entity;
     d.link_palette = c.link_palette === "gold" || c.link_palette === "green" ? c.link_palette : "same";
     d.link_collapsible = c.link_collapsible !== false;
     d.link_show_bar = c.link_show_bar !== false;
@@ -743,12 +779,29 @@ class TitanStatusCardEditor extends HTMLElement {
       .forEach(k => put(k, d[k]));
     ["capacity_kwh", "history_hours", "threshold"].forEach(k => put(k, has(d[k]) ? Number(d[k]) : undefined));
     if (d.palette === "green") out.palette = "green"; else delete out.palette;
-    if (d.show_ring) out.show_ring = true; else delete out.show_ring;
+    if (d.green_style === "fluo" || d.green_style === "normal") out.green_style = d.green_style; else delete out.green_style;
+    delete out.show_ring;   // option supprimée en 2.0 : l'éditeur la retire des anciennes configurations
     if (d.show_temps) out.show_temps = true; else delete out.show_temps;
     if (d.show_eta === false) out.show_eta = false; else delete out.show_eta;
     if (d.eta_hide_idle === false) out.eta_hide_idle = false; else delete out.eta_hide_idle;
     if (d.show_label === false) out.show_label = false; else delete out.show_label;
     if (d.link_compact === true) out.link_compact = true; else delete out.link_compact;
+    if (d.show_pv === false) out.show_pv = false; else delete out.show_pv;
+    if (d.pv_position === "right") out.pv_position = "right"; else delete out.pv_position;
+    if (d.pv_dropdown === true) out.pv_dropdown = true; else delete out.pv_dropdown;
+    const pvs = [];
+    for (let i = 0; i < TSC_N.pv; i++) {
+      const prevPv = (Array.isArray(base.pv) && base.pv[i]) || {};
+      if (has(d["pv" + i + "_entity"])) pvs.push({ ...prevPv, entity: d["pv" + i + "_entity"] });
+    }
+    if (pvs.length) out.pv = pvs; else delete out.pv;
+    const tps = [];
+    for (let i = 0; i < TSC_N.temps; i++) {
+      const prevT = (Array.isArray(base.temps) && base.temps[i]) || {};
+      if (has(d["tp" + i + "_entity"])) tps.push({ ...(Object.keys(prevT).length ? prevT : { icon: "mdi:thermometer" }), entity: d["tp" + i + "_entity"] });
+    }
+    if (Array.isArray(base.temps)) tps.push(...base.temps.slice(TSC_N.temps));   // pastilles supplémentaires saisies en YAML : conservées
+    if (tps.length) out.temps = tps; else delete out.temps;
     if (d.link_palette === "gold" || d.link_palette === "green") out.link_palette = d.link_palette; else delete out.link_palette;
     if (d.link_collapsible === false) out.link_collapsible = false; else delete out.link_collapsible;
     if (d.link_show_bar === false) out.link_show_bar = false; else delete out.link_show_bar;
@@ -816,10 +869,11 @@ class TitanStatusCardEditor extends HTMLElement {
       { type: "expandable", name: "", title: "Général", icon: "mdi:cog", expanded: true, schema: [
         tscTxt("name"), tscTxt("brand"), tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
-        tscBool("show_ring"), tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        { name: "green_style", selector: { select: { mode: "dropdown", options: [{ value: "default", label: "Par défaut (vert normal)" }, { value: "normal", label: "Vert normal" }, { value: "fluo", label: "Vert fluo" }] } } },
+        tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
-        tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
+        tscEnt("tp0_entity", "sensor"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
         tscEnt("mode_entity"), tscEnt("days_entity"), tscEnt("stored_entity"), tscEnt("history_entity")] },
       { type: "expandable", name: "", title: "Boutons de commande (LED, Off-grid…)", icon: "mdi:toggle-switch", schema: [
         { name: "controls_position", selector: { select: { mode: "dropdown", options: [{ value: "top", label: "Dans l'en-tête" }, { value: "bottom", label: "Sous la carte" }] } } },
@@ -828,6 +882,10 @@ class TitanStatusCardEditor extends HTMLElement {
         tscEnt("pl_enable", "input_boolean"), tscTxt("pl_name"), tscEnt("pl_active", "input_boolean"),
         ...slots, tscEnt("pl_power"), tscEnt("pl_soc"), tscNum("pl_warn"), tscEnt("pl_end", "input_select"),
         { name: "pl_position", selector: { select: { mode: "dropdown", options: TSC_POS } } }] },
+      { type: "expandable", name: "", title: "Entrées PV (onduleurs)", icon: "mdi:solar-panel-large", schema: [
+        tscBool("show_pv"),
+        { name: "pv_position", selector: { select: { mode: "dropdown", options: [{ value: "left", label: "Sous les kWh (à gauche)" }, { value: "right", label: "À droite" }] } } },
+        tscBool("pv_dropdown"), ...[0, 1, 2, 3].map(i => tscEnt("pv" + i + "_entity", "sensor"))] },
       { type: "expandable", name: "", title: "Modules Link", icon: "mdi:battery-plus", schema: links },
     ];
   }
@@ -844,9 +902,9 @@ class TitanStatusCardEditor extends HTMLElement {
         }
       } catch (e) { /* ignore */ }
       this._form = document.createElement("ha-form");
-      this._form.computeLabel = s => TSC_LABELS[s.name] || TSC_LABELS[(s.name || "").replace(/^(lk|ct|sl)\d_/, "")] || ({
+      this._form.computeLabel = s => (/^pv\d_entity$/.test(s.name) ? "Entrée PV " + (Number(s.name[2]) + 1) : /^tp\d_entity$/.test(s.name) ? "Température Titan" : null) || TSC_LABELS[s.name] || TSC_LABELS[(s.name || "").replace(/^(lk|ct|sl)\d_/, "")] || ({
         confirm: "Confirmer avant d'agir", label: "Libellé", entity: "Entité", icon: "Icône", start: "Début", end: "Fin", soc: "SOC", temp: "Température", cycles: "Cycles" }[(s.name || "").replace(/^(lk|ct|sl)\d_/, "")]) || s.name;
-      this._form.computeHelper = s => TSC_HELP[s.name] || TSC_HELP[(s.name || "").replace(/^(lk|sl)\d_/, "$1_").replace(/^ct\d_/, "ct_")] || "";
+      this._form.computeHelper = s => (/^pv\d_entity$/.test(s.name) ? "Exemple : …_dc_input_power_" + (Number(s.name[2]) + 1) : null) || TSC_HELP[s.name] || TSC_HELP[(s.name || "").replace(/^(lk|sl)\d_/, "$1_").replace(/^ct\d_/, "ct_")] || "";
       this._form.addEventListener("value-changed", ev => {
         ev.stopPropagation();
         const val = { ...ev.detail.value };
@@ -857,6 +915,8 @@ class TitanStatusCardEditor extends HTMLElement {
         if (m) {
           Object.keys(TSC_AUTO).forEach(k => fill(k, "sensor." + m[1] + TSC_AUTO[k]));
           fill("floor_entity", TSC_FLOOR);
+          fill("tp0_entity", "sensor." + m[1] + "temperature");
+          for (let i = 0; i < TSC_N.pv; i++) fill("pv" + i + "_entity", "sensor." + m[1] + "dc_input_power_" + (i + 1));
         }
         for (let i = 0; i < TSC_N.link; i++) {
           const v = val["lk" + i + "_soc"], l = v && v !== old["lk" + i + "_soc"] ? /^sensor\.(.*_link_)soc$/.exec(v) : null;
@@ -877,15 +937,18 @@ class TitanStatusCardEditor extends HTMLElement {
 }
 
 class TitanLinkCardEditor extends TitanStatusCardEditor {
-  _flatten(c) { return { ...c, compact: c.compact === true, show_bar: c.show_bar !== false }; }
+  _flatten(c) { return { ...c, compact: c.compact === true, show_bar: c.show_bar !== false, palette: c.palette === "green" ? "green" : "gold", green_style: c.green_style === "fluo" || c.green_style === "normal" ? c.green_style : "default" }; }
   _unflatten(d, base) {
     const out = { ...base };
     ["name", "brand", "soc_entity", "temp_entity", "cycles_entity"].forEach(k => { if (d[k] !== undefined && d[k] !== null && d[k] !== "") out[k] = d[k]; else delete out[k]; });
+    if (d.palette === "green") out.palette = "green"; else delete out.palette;
+    if (d.green_style === "fluo" || d.green_style === "normal") out.green_style = d.green_style; else delete out.green_style;
+    ["background", "text_color", "border_color"].forEach(k => { if (d[k]) out[k] = d[k]; else delete out[k]; });
     if (d.compact === true) out.compact = true; else delete out.compact;
     if (d.show_bar === false) out.show_bar = false; else delete out.show_bar;
     return out;
   }
-  _schema() { return [tscTxt("name"), tscTxt("brand"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity"), tscBool("compact"), tscBool("show_bar")]; }
+  _schema() { return [tscTxt("name"), tscTxt("brand"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity"), { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, { name: "green_style", selector: { select: { mode: "dropdown", options: [{ value: "default", label: "Par défaut (vert normal)" }, { value: "normal", label: "Vert normal" }, { value: "fluo", label: "Vert fluo" }] } } }, tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"), tscBool("compact"), tscBool("show_bar")]; }
 }
 TSC_LABELS.compact = "Affichage compact (bloc plus petit)"; TSC_LABELS.temp_entity = "Température"; TSC_LABELS.cycles_entity = "Cycles";
 
