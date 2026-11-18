@@ -99,6 +99,7 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `link_show_bar` | `false` masque la barre de charge/décharge des blocs Link (affichée par défaut). Pour un seul bloc, ajouter `show_bar: false` dans ce `link` |
 | `link_open` | `true` : les blocs Link sont ouverts au départ (ensuite, le dernier choix de l'appareil est mémorisé) |
 | `controls` | Boutons dans l'en-tête pour commander des interrupteurs (`switch`, `input_boolean`, `light`) : `entity`, `label`, `icon`, `confirm` |
+| `alarm_entity` | Capteur d'alarme (ex. `sensor.izypower_titan_titan_alarm`). Ajoute à côté des boutons de commande une pastille grisée ; elle passe au **rouge clignotant** si une alarme est active ou s'est produite pendant les dernières `alarm_hours` heures (24 par défaut). Les états « No Alarm », « Unknown », « unavailable »… sont ignorés (ajoutez d'autres états à ignorer avec `alarm_ignore: [...]`). Survol = texte de l'alarme. **Un clic sur la pastille rouge l'acquitte** (elle redevient grise et ne se rallume que pour une nouvelle alarme ; mémorisé dans le navigateur) ; un clic sur la pastille grise ouvre la fiche de l'entité. `alarm_icon` pour changer l'icône |
 | `planning` | Section repliable « Planning de recharge » : interrupteur, plages horaires, puissance et SOC cible (voir ci-dessous) |
 | `labels`, `bar_colors`, `bar_colors_dark`, `curve_color` | Libellés et couleurs. `bar_colors.full` (optionnel) règle la couleur de la barre quand la batterie est pleine (par défaut, celle de `charge`) |
 | `show_eta` | `false` masque l'horloge / heure estimée en haut à gauche (affichée par défaut) |
@@ -184,6 +185,14 @@ link:
 
 Le Link se déplie avec la flèche sous la carte ; le choix est retenu sur chaque appareil.
 La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`), plus `compact: true` pour un affichage réduit, `palette: green` (noir et vert), `background`, `text_color` et `border_color` ; tout est aussi dans l'éditeur visuel).
+
+## Version 2.2.0
+
+- Nouvelle pastille d'alarme (`alarm_entity`) : grisée au repos, rouge et clignotante si une alarme est active ou s'est déclenchée dans les dernières 24 h (`alarm_hours`) ; un clic l'acquitte (après une coupure de courant, par exemple). Détection par l'historique du capteur ; les passages par « indisponible » (redémarrage routeur…) ne comptent pas. Champ « Capteur d'alarme » dans l'éditeur, pré-rempli automatiquement.
+
+## Version 2.1.2
+
+- Boutons de commande (`controls`) sans `label` : dans l'en-tête, ils restent une simple icône (plus de nom d'entité très long qui déborde sur le titre et la marque) ; en bas de carte, le nom de l'entité s'affiche, coupé avec « … » s'il est trop long. Un `label` court (`LED`, `Off-grid`…) reste le plus propre pour afficher du texte.
 
 ## Version 2.1.1
 

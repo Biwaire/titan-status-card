@@ -50,7 +50,14 @@ class TitanStatusCard extends HTMLElement {
       temps: Array.isArray(config.temps) ? config.temps.slice(0, 4) : [],
       footer: Array.isArray(config.footer) ? config.footer.slice(0, 4) : [],
       controls: Array.isArray(config.controls) ? config.controls.filter(o => o && o.entity).slice(0, 6) : [],
+      alarm_entity: typeof config.alarm_entity === "string" ? config.alarm_entity : "",
+      alarm_hours: Number(config.alarm_hours) > 0 ? Number(config.alarm_hours) : 24,
+      alarm_ignore: new Set(["no alarm", "unknown", "unavailable", "indisponible", "none", "ok",
+        ...(Array.isArray(config.alarm_ignore) ? config.alarm_ignore.map(v => String(v).toLowerCase()) : [])]),
     };
+    this._alarm = null; this._alarmT = 0; this._alarmAt = 0; this._alarmBusy = false;
+    this._ack = null;
+    try { this._ack = JSON.parse(localStorage.getItem("tsc-ack-" + this._c.alarm_entity) || "null"); } catch (x) {}
     this._hist = null; this._histAt = 0; this._histBusy = false;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._build();
@@ -97,8 +104,9 @@ class TitanStatusCard extends HTMLElement {
     const foot = c.footer.map((f, i) => `<div class="fo"><i>${this._esc(f.label || "")}</i><b class="fv" data-i="${i}">—</b></div>`).join("");
     const ctlIcon = o => o.icon || (/off_grid|offgrid/i.test(o.entity) ? "mdi:transmission-tower-off" : /led/i.test(o.entity) ? "mdi:led-on" : "mdi:toggle-switch");
     const ctlBottom = c.controls_position === "bottom";
-    const ctl = c.controls.length ? `<div class="ctl${ctlBottom ? "" : " inhead"}">${c.controls.map((o, i) =>
-      `<button class="cb" data-i="${i}" title="${this._esc(o.label || o.entity)}"><ha-icon icon="${this._esc(ctlIcon(o))}"></ha-icon><span>${this._esc(o.label || "")}</span></button>`).join("")}</div>` : "";
+    const alarmBtn = c.alarm_entity ? `<button class="cb al" title="Alarme : aucune"><ha-icon icon="${this._esc(c.alarm_icon || "mdi:shield-check-outline")}"></ha-icon><span></span></button>` : "";
+    const ctl = (c.controls.length || alarmBtn) ? `<div class="ctl${ctlBottom ? "" : " inhead"}">${c.controls.map((o, i) =>
+      `<button class="cb" data-i="${i}" title="${this._esc(o.label || o.entity)}"><ha-icon icon="${this._esc(ctlIcon(o))}"></ha-icon><span>${this._esc(o.label || "")}</span></button>`).join("")}${alarmBtn}</div>` : "";
     const pl = c.planning && typeof c.planning === "object" ? c.planning : null;
     const plSlots = pl && Array.isArray(pl.slots) ? pl.slots.filter(o => o && o.start && o.end).slice(0, 4) : [];
     const warnW = pl && Number.isFinite(Number(pl.power_warn)) ? Number(pl.power_warn) : 800;
@@ -155,17 +163,24 @@ class TitanStatusCard extends HTMLElement {
           background:color-mix(in srgb,#e5484d 12%,transparent);color:${tc} }
         .pwn[hidden] { display:none }
         .pr em { font-style:normal;font-weight:700;font-size:.86rem;min-width:64px;text-align:center }
-        .ctl.inhead { padding:0;border:0;flex:1;justify-content:center;gap:5px;min-width:0 }
-        .inhead .cb { flex:none;padding:1px 7px;font-size:.56rem;gap:3px;border-radius:6px }
+        .ctl.inhead { padding:0;border:0;flex:1;justify-content:center;gap:5px;min-width:0;overflow:hidden }
+        .inhead .cb { flex:0 1 auto;max-width:50%;padding:1px 7px;font-size:.56rem;gap:3px;border-radius:6px }
         .inhead .cb ha-icon { --mdc-icon-size:13px }
         .cb { all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;
           border:1.5px solid var(--bd,var(--gold));border-radius:8px;padding:4px 8px;font-size:.68rem;font-weight:700;letter-spacing:.06em;
           text-transform:uppercase;white-space:nowrap;color:${tc};transition:background .2s,color .2s }
-        .cb ha-icon { --mdc-icon-size:18px;color:var(--gold) }
+        .cb span { overflow:hidden;text-overflow:ellipsis;min-width:0 }   /* un nom long (sans label) est coupé avec « … » au lieu de déborder */
+        .cb ha-icon { --mdc-icon-size:18px;color:var(--gold);flex:none }
         .cb.on { background:var(--gold);color:#111 }
         .cb.on ha-icon { color:#111 }
         .cb.ask { border-style:dashed;animation:askp 1s ease-in-out infinite }
         .cb.off { opacity:.4;pointer-events:none }
+        .cb.al { opacity:.45 }
+        .cb.al ha-icon { color:inherit }
+        .cb.al.hot { opacity:1;color:#ff4d4f;border-color:#ff4d4f;background:color-mix(in srgb,#ff4d4f 16%,transparent);animation:alblink 1.2s ease-in-out infinite }
+        .cb.al.hot ha-icon { color:#ff4d4f }
+        @keyframes alblink { 50% { opacity:.4 } }
+        @media (prefers-reduced-motion: reduce) { .cb.al.hot { animation:none } }
         @keyframes askp { 50% { opacity:.55 } }
         .tg { display:flex;justify-content:center;height:24px;border-top:1px solid color-mix(in srgb,var(--bd,var(--gold)) 25%,transparent) }
         .tb { all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;width:64px;height:24px;color:var(--gold) }
@@ -284,7 +299,7 @@ class TitanStatusCard extends HTMLElement {
 
       mv: r.querySelector(".mv"), dv: r.querySelector(".dv"),
       pv: [...r.querySelectorAll(".pvv")], tv: [...r.querySelectorAll(".tv")], fv: [...r.querySelectorAll(".fv")],
-      sa: r.querySelector(".sa"), sl: r.querySelector(".sl"), cb: [...r.querySelectorAll(".cb")],
+      sa: r.querySelector(".sa"), sl: r.querySelector(".sl"), cb: [...r.querySelectorAll(".cb:not(.al)")], al: r.querySelector(".cb.al"),
     };
     const pvt = r.querySelector(".pvt"), pvd = r.querySelector(".pvd");
     if (pvt && pvd) {
@@ -309,6 +324,14 @@ class TitanStatusCard extends HTMLElement {
       this._hass.callService("homeassistant", "toggle", { entity_id: o.entity });
       this._paintControls();
     }));
+    if (this._e.al) this._e.al.addEventListener("click", () => {   // pastille rouge : acquitte ; pastille grise : fiche de l'entité
+      if (this._e.al.classList.contains("hot")) {
+        const cur = this._txt(c.alarm_entity);
+        this._ack = { t: Date.now(), s: this._isAlarm(cur) ? cur : "" };
+        try { localStorage.setItem("tsc-ack-" + c.alarm_entity, JSON.stringify(this._ack)); } catch (x) {}
+        this._paintAlarm();
+      } else this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: c.alarm_entity } }));
+    });
     if (pl) {
       const pb = r.querySelector(".pb"), pt = r.querySelector(".pt");
       const key = "titan-plan-open:" + (c.name || "");
@@ -442,7 +465,8 @@ class TitanStatusCard extends HTMLElement {
     c.controls.forEach((o, i) => {
       const b = e.cb[i]; if (!b) return;
       const st = this._txt(o.entity), ok = st && st !== "unavailable" && st !== "unknown";
-      const name = o.label || ((this._hass && this._hass.states[o.entity] || { attributes: {} }).attributes.friendly_name) || o.entity;
+      // dans l'en-tête, un bouton sans label reste une simple icône (le nom complet de l'entité serait trop long) ; en bas, on affiche le nom de l'entité
+      const name = o.label || (c.controls_position !== "bottom" ? "" : (((this._hass && this._hass.states[o.entity]) || { attributes: {} }).attributes.friendly_name || o.entity));
       b.classList.toggle("on", st === "on");
       b.classList.toggle("off", !ok);
       b.classList.toggle("ask", this._armed === i);
@@ -451,9 +475,47 @@ class TitanStatusCard extends HTMLElement {
     });
   }
 
+  _isAlarm(v) { const t = String(v == null ? "" : v).trim(); return !!t && !this._c.alarm_ignore.has(t.toLowerCase()); }
+
+  _paintAlarm() {
+    const c = this._c, b = this._e && this._e.al;
+    if (!b) return;
+    const cur = this._txt(c.alarm_entity), now = this._isAlarm(cur);
+    const ack = this._ack || { t: 0, s: "" };
+    const nowHot = now && cur !== ack.s;                         // alarme en cours non acquittée
+    const oldHot = !!this._alarm && this._alarmT > ack.t;        // alarme passée, postérieure à l'acquittement
+    const text = nowHot ? cur : (this._alarm || "");
+    const hot = nowHot || oldHot;
+    b.classList.toggle("hot", hot);
+    b.title = hot ? "Alarme : " + text + " — clic pour acquitter" : "Aucune alarme (" + c.alarm_hours + " h)";
+    b.querySelector("span").textContent = hot ? text : "";
+    b.querySelector("ha-icon").setAttribute("icon", c.alarm_icon || (hot ? "mdi:shield-alert" : "mdi:shield-check-outline"));
+    this._loadAlarm();
+  }
+
+  async _loadAlarm() {
+    const c = this._c;
+    if (!c.alarm_entity || !this._hass || this._alarmBusy || typeof this._hass.callApi !== "function") return;
+    if (this._alarmAt && Date.now() - this._alarmAt < 300000) return;
+    this._alarmBusy = true;
+    try {
+      const end = new Date(), start = new Date(end.getTime() - c.alarm_hours * 3600 * 1000);
+      const url = `history/period/${start.toISOString()}?filter_entity_id=${c.alarm_entity}&end_time=${end.toISOString()}&minimal_response&no_attributes`;
+      const res = await this._hass.callApi("GET", url);
+      const rows = (res && res[0]) || [];
+      let last = null, lt = 0;
+      rows.forEach(r => { if (this._isAlarm(r.state)) { last = String(r.state); lt = Date.parse(r.last_changed || r.last_updated || "") || start.getTime(); } });   // dernière alarme de la période
+      this._alarm = last; this._alarmT = lt; this._alarmAt = Date.now();
+      this._paintAlarm();
+    } catch (err) {
+      this._alarmAt = Date.now() - 240000; // réessaie dans ~1 min
+    } finally { this._alarmBusy = false; }
+  }
+
   _update() {
     const c = this._c, e = this._e;
     this._paintControls();
+    this._paintAlarm();
     this._paintPlan();
     const soc = this._num(c.soc_entity);
     let p = this._num(c.power_entity);
@@ -699,6 +761,7 @@ const TSC_LABELS = {
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
   stored_entity: "Énergie stockée (kWh)", history_entity: "Entité de l'historique (optionnel)",
+  alarm_entity: "Capteur d'alarme (optionnel)",
   controls_position: "Position des boutons de commande",
   pl_name: "Titre de la section", pl_enable: "Interrupteur du planning", pl_active: "Indicateur « En cours » (optionnel)",
   pl_power: "Puissance de recharge", pl_soc: "SOC cible", pl_warn: "Seuil d'avertissement (W)",
@@ -710,6 +773,7 @@ const TSC_HELP = {
   text_color: "Exemple : #333333. Vide = couleur d'origine",
   green_style: "Par défaut = vert normal. Fluo = vert vif (#39ff14), uniquement pour la barre de charge et la courbe. Un choix fluo/normal l'emporte sur les couleurs saisies à la main (bar_colors, curve_color…)",
   border_color: "Cadres des pastilles et des boutons. Exemple : #39ff14. Vide = couleur d'accent",
+  alarm_entity: "Exemple : …_titan_alarm (grisé, rouge clignotant si alarme)",
   soc_entity: "Exemple : …_pile_average", power_entity: "Exemple : …_ac_input_and_output (positif = charge)",
   state_entity: "Exemple : …_battery_state", mode_entity: "Exemple : …_working_mode",
   floor_entity: "Exemple : cluster_soc_security_esp", days_entity: "Exemple : …_jours_depuis_charge_complete",
@@ -776,7 +840,7 @@ class TitanStatusCardEditor extends HTMLElement {
     const out = { ...base };
     const has = v => v !== undefined && v !== null && v !== "";
     const put = (k, v) => { if (has(v)) out[k] = v; else delete out[k]; };
-    ["name", "brand", "gold", "background", "text_color", "border_color", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity"]
+    ["name", "brand", "gold", "background", "text_color", "border_color", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity", "alarm_entity"]
       .forEach(k => put(k, d[k]));
     ["capacity_kwh", "history_hours", "threshold"].forEach(k => put(k, has(d[k]) ? Number(d[k]) : undefined));
     if (d.palette === "green") out.palette = "green"; else delete out.palette;
@@ -874,7 +938,7 @@ class TitanStatusCardEditor extends HTMLElement {
         tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
-        tscEnt("tp0_entity", "sensor"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
+        tscEnt("tp0_entity", "sensor"), tscEnt("alarm_entity", "sensor"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
         tscEnt("mode_entity"), tscEnt("days_entity"), tscEnt("stored_entity"), tscEnt("history_entity")] },
       { type: "expandable", name: "", title: "Boutons de commande (LED, Off-grid…)", icon: "mdi:toggle-switch", schema: [
         { name: "controls_position", selector: { select: { mode: "dropdown", options: [{ value: "top", label: "Dans l'en-tête" }, { value: "bottom", label: "Sous la carte" }] } } },
@@ -917,6 +981,7 @@ class TitanStatusCardEditor extends HTMLElement {
           Object.keys(TSC_AUTO).forEach(k => fill(k, "sensor." + m[1] + TSC_AUTO[k]));
           fill("floor_entity", TSC_FLOOR);
           fill("tp0_entity", "sensor." + m[1] + "temperature");
+          fill("alarm_entity", "sensor." + m[1] + "alarm");
           for (let i = 0; i < TSC_N.pv; i++) fill("pv" + i + "_entity", "sensor." + m[1] + "dc_input_power_" + (i + 1));
         }
         for (let i = 0; i < TSC_N.link; i++) {
