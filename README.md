@@ -89,7 +89,9 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `mode_entity`, `mode_labels` | Mode de travail et traduction des libellés |
 | `days_entity`, `days_label` | Jours depuis la dernière charge complète |
 | `temps` + `show_temps` | Pastilles de température (jusqu'à 4). Dans l'éditeur : champ « Température Titan » en haut de la section Entités |
-| `footer` | Jusqu'à 4 compteurs (`label`, `entity`, `unit`, `decimals`) |
+| `capacity_kwh` | Capacité totale en kWh, utilisée pour calculer l'énergie stockée à partir du pourcentage. Défaut : 2,01 (une Titan seule). Voir « Capacité selon l'installation » |
+| `bypass_entity`, `bypass_label`, `bypass_hide_idle`, `bypass_switch` | Puissance de la prise de secours (off-grid), ex. `sensor.izypower_titan_titan_bypass_power`. Pastille « BACKUP 408 W » en bas à droite (`bypass_label` change le texte). Elle **n'apparaît que lorsque l'off-grid est activé** : l'interrupteur est repris automatiquement de `controls` (entité contenant `off_grid`), ou donné avec `bypass_switch`. `bypass_hide_idle: true` la masque en plus quand rien n'est branché (1 W ou moins) |
+| `footer` | Jusqu'à 4 compteurs libres (`label`, `entity`, `unit`, `decimals`), par exemple l'énergie totale du cluster en kWh |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
 | `link_compact` | `true` : tous les blocs Link sont compacts (environ 3 fois moins hauts). Désactivé par défaut. Pour un seul bloc, ajouter `compact: true` dans ce `link` |
 | `brand` (dans un bloc `link`) | Petit texte affiché en haut à droite du bloc Link, comme la marque de la carte principale (ex. `brand: MODULE A`) |
@@ -185,6 +187,26 @@ link:
 
 Le Link se déplie avec la flèche sous la carte ; le choix est retenu sur chaque appareil.
 La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity`, `temp_entity`, `cycles_entity`), plus `compact: true` pour un affichage réduit, `palette: green` (noir et vert), `background`, `text_color` et `border_color` ; tout est aussi dans l'éditeur visuel).
+
+## Capacité selon l'installation
+
+`capacity_kwh` est la capacité de **tout ce que la carte regroupe** : la Titan plus ses Link. Titan : 2,01 kWh ; Link : 2,01 kWh ou 4,032 kWh selon le modèle.
+
+| Installation | `capacity_kwh` |
+|---|---|
+| Titan seule | 2,01 |
+| Titan + 1 Link (2,01) | 4,02 |
+| Titan + 3 Link (2,01) | 8,04 |
+| Titan + 1 grande Link (4,032) | 6,042 |
+| Titan + 2 grandes Link (4,032) | 10,074 |
+
+Autre combinaison : 2,01 pour la Titan, plus 2,01 par petite Link et 4,032 par grande Link.
+
+## Version 2.2.1
+
+- Capacité par défaut ramenée à 2,01 kWh (un seul Titan) au lieu de 4,02. Si vous aviez 4,02 sans le préciser, ajoutez `capacity_kwh: 4.02`.
+- Nouvelle pastille « BACKUP » de puissance de la prise de secours (`bypass_entity`), texte modifiable (`bypass_label`), visible seulement quand l'off-grid est activé (interrupteur repris de `controls`, ou `bypass_switch`), masquable aussi quand rien n'est branché (`bypass_hide_idle`). Champs dans l'éditeur, `bypass_entity` pré-rempli automatiquement.
+- Exemples de capacité par type d'installation, et `footer` documenté pour afficher par exemple l'énergie totale du cluster.
 
 ## Version 2.2.0
 

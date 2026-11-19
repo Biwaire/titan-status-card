@@ -32,7 +32,7 @@ class TitanStatusCard extends HTMLElement {
       show_temps: false,           // pastilles de température à droite
       theme: "light",              // "light" (carte blanche) ou "auto" (couleurs du thème HA)
       power_charge_positive: true,
-      capacity_kwh: 4.02,
+      capacity_kwh: 2.01,
       history_hours: 24,
       threshold: 10,
       ...config,
@@ -51,6 +51,12 @@ class TitanStatusCard extends HTMLElement {
       footer: Array.isArray(config.footer) ? config.footer.slice(0, 4) : [],
       controls: Array.isArray(config.controls) ? config.controls.filter(o => o && o.entity).slice(0, 6) : [],
       alarm_entity: typeof config.alarm_entity === "string" ? config.alarm_entity : "",
+      bypass_entity: typeof config.bypass_entity === "string" ? config.bypass_entity : "",
+      bypass_label: typeof config.bypass_label === "string" ? config.bypass_label : "BACKUP",
+      bypass_hide_idle: config.bypass_hide_idle === true,
+      // interrupteur off-grid : la pastille n'apparaît que s'il est activé (détecté dans controls, ou bypass_switch)
+      bypass_switch: typeof config.bypass_switch === "string" ? config.bypass_switch
+        : ((Array.isArray(config.controls) ? config.controls : []).find(o => o && /off_grid|offgrid/i.test(o.entity || "")) || {}).entity || "",
       alarm_hours: Number(config.alarm_hours) > 0 ? Number(config.alarm_hours) : 24,
       alarm_ignore: new Set(["no alarm", "unknown", "unavailable", "indisponible", "none", "ok",
         ...(Array.isArray(config.alarm_ignore) ? config.alarm_ignore.map(v => String(v).toLowerCase()) : [])]),
@@ -101,6 +107,8 @@ class TitanStatusCard extends HTMLElement {
       const ic = t.icon || (/🌡/.test(t.label || "") ? "mdi:thermometer" : "");
       return `<div class="chip">${ic ? `<ha-icon icon="${this._esc(ic)}"></ha-icon>` : `<b>${this._esc(t.label || "")}</b>`}<span class="tv" data-i="${i}">—</span></div>`;
     }).join("");
+    // prise de secours (off-grid) : pastille en bas à droite, visible seulement si quelque chose est branché
+    const bypassChip = c.bypass_entity ? `<div class="chip by" title="Prise de secours">${c.bypass_label ? `<b>${this._esc(c.bypass_label)}</b>` : `<ha-icon icon="mdi:power-plug"></ha-icon>`}<span class="bv">—</span></div>` : "";
     const foot = c.footer.map((f, i) => `<div class="fo"><i>${this._esc(f.label || "")}</i><b class="fv" data-i="${i}">—</b></div>`).join("");
     const ctlIcon = o => o.icon || (/off_grid|offgrid/i.test(o.entity) ? "mdi:transmission-tower-off" : /led/i.test(o.entity) ? "mdi:led-on" : "mdi:toggle-switch");
     const ctlBottom = c.controls_position === "bottom";
@@ -231,6 +239,7 @@ class TitanStatusCard extends HTMLElement {
         .chip { border:1.5px solid var(--bd,var(--gold));color:${tc};border-radius:8px;display:flex;align-items:center;justify-content:center;gap:3px;
           padding:3px 8px;font-size:.72rem;font-weight:600;white-space:normal;text-align:center;line-height:1.2 }
         .chip ha-icon { --mdc-icon-size:16px;color:var(--gold) }
+        .chip[hidden] { display:none }
         .chip.mode { font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:2px 8px }
         svg.spark { position:absolute;left:0;right:0;bottom:34px;width:100%;height:46px;z-index:0;pointer-events:none }
         .foot { display:flex;justify-content:space-between;gap:6px;margin-top:auto;position:relative;z-index:1;padding-top:52px }
@@ -273,8 +282,8 @@ class TitanStatusCard extends HTMLElement {
                 <div class="kwh">—</div>
                 ${pvBlock && !pvRight ? pvBlock : ""}
               </div>
-              ${(temps && c.show_temps) || c.mode_entity || c.days_entity || (pvBlock && pvRight)
-                ? `<div class="chips">${c.mode_entity ? `<div class="chip mode"><span class="mv">—</span></div>` : ""}${c.days_entity ? `<div class="chip mode"><span class="dv">—</span></div>` : ""}${c.show_temps ? temps : ""}${pvRight ? pvBlock : ""}</div>` : ""}
+              ${(temps && c.show_temps) || c.mode_entity || c.days_entity || (pvBlock && pvRight) || c.bypass_entity
+                ? `<div class="chips">${c.mode_entity ? `<div class="chip mode"><span class="mv">—</span></div>` : ""}${c.days_entity ? `<div class="chip mode"><span class="dv">—</span></div>` : ""}${c.show_temps ? temps : ""}${pvRight ? pvBlock : ""}${bypassChip}</div>` : ""}
             </div>
             <svg class="spark" viewBox="0 0 300 46" preserveAspectRatio="none">
               <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
@@ -297,7 +306,7 @@ class TitanStatusCard extends HTMLElement {
       etav: r.querySelector(".etav"), eta: r.querySelector(".eta"), vt: r.querySelector(".vt"), bar: r.querySelector(".bar i"),
       pwv: r.querySelector(".pwv"), socv: r.querySelector(".socv"), kwh: r.querySelector(".kwh"),
 
-      mv: r.querySelector(".mv"), dv: r.querySelector(".dv"),
+      mv: r.querySelector(".mv"), dv: r.querySelector(".dv"), by: r.querySelector(".chip.by"), bv: r.querySelector(".bv"),
       pv: [...r.querySelectorAll(".pvv")], tv: [...r.querySelectorAll(".tv")], fv: [...r.querySelectorAll(".fv")],
       sa: r.querySelector(".sa"), sl: r.querySelector(".sl"), cb: [...r.querySelectorAll(".cb:not(.al)")], al: r.querySelector(".cb.al"),
     };
@@ -577,6 +586,12 @@ class TitanStatusCard extends HTMLElement {
       const v = this._num(x.entity);
       if (e.tv[i]) e.tv[i].textContent = Number.isFinite(v) ? this._fmt(v, 1) + "°" : "—";
     });
+    if (e.by) {                                    // prise de secours : toujours visible, ou seulement si > 1 W (bypass_hide_idle)
+      const bw = this._num(c.bypass_entity), used = Number.isFinite(bw) && bw > 1;
+      const sw = c.bypass_switch ? this._hass.states[c.bypass_switch] : null;
+      e.by.hidden = (sw && sw.state !== "on") || (c.bypass_hide_idle && !used);
+      e.bv.textContent = Number.isFinite(bw) ? this._fmt(bw, 0) + " W" : "—";
+    }
     c.footer.forEach((x, i) => {
       const v = this._num(x.entity);
       const u = x.unit !== undefined ? x.unit : ((this._hass.states[x.entity] || { attributes: {} }).attributes.unit_of_measurement || "");
@@ -761,7 +776,7 @@ const TSC_LABELS = {
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
   stored_entity: "Énergie stockée (kWh)", history_entity: "Entité de l'historique (optionnel)",
-  alarm_entity: "Capteur d'alarme (optionnel)",
+  alarm_entity: "Capteur d'alarme (optionnel)", bypass_entity: "Puissance prise de secours (optionnel)", bypass_label: "Texte de la pastille secours (BACKUP par défaut)", bypass_hide_idle: "Masquer la pastille secours si rien n'est branché",
   controls_position: "Position des boutons de commande",
   pl_name: "Titre de la section", pl_enable: "Interrupteur du planning", pl_active: "Indicateur « En cours » (optionnel)",
   pl_power: "Puissance de recharge", pl_soc: "SOC cible", pl_warn: "Seuil d'avertissement (W)",
@@ -774,6 +789,7 @@ const TSC_HELP = {
   green_style: "Par défaut = vert normal. Fluo = vert vif (#39ff14), uniquement pour la barre de charge et la courbe. Un choix fluo/normal l'emporte sur les couleurs saisies à la main (bar_colors, curve_color…)",
   border_color: "Cadres des pastilles et des boutons. Exemple : #39ff14. Vide = couleur d'accent",
   alarm_entity: "Exemple : …_titan_alarm (grisé, rouge clignotant si alarme)",
+  bypass_entity: "Exemple : …_bypass_power (pastille visible seulement si quelque chose est branché)",
   soc_entity: "Exemple : …_pile_average", power_entity: "Exemple : …_ac_input_and_output (positif = charge)",
   state_entity: "Exemple : …_battery_state", mode_entity: "Exemple : …_working_mode",
   floor_entity: "Exemple : cluster_soc_security_esp", days_entity: "Exemple : …_jours_depuis_charge_complete",
@@ -830,6 +846,7 @@ class TitanStatusCardEditor extends HTMLElement {
     d.pv_dropdown = c.pv_dropdown === true;
     for (let i = 0; i < TSC_N.pv; i++) d["pv" + i + "_entity"] = (Array.isArray(c.pv) && c.pv[i] || {}).entity;
     for (let i = 0; i < TSC_N.temps; i++) d["tp" + i + "_entity"] = (Array.isArray(c.temps) && c.temps[i] || {}).entity;
+    d.bypass_hide_idle = c.bypass_hide_idle === true;
     d.link_palette = c.link_palette === "gold" || c.link_palette === "green" ? c.link_palette : "same";
     d.link_collapsible = c.link_collapsible !== false;
     d.link_show_bar = c.link_show_bar !== false;
@@ -840,13 +857,14 @@ class TitanStatusCardEditor extends HTMLElement {
     const out = { ...base };
     const has = v => v !== undefined && v !== null && v !== "";
     const put = (k, v) => { if (has(v)) out[k] = v; else delete out[k]; };
-    ["name", "brand", "gold", "background", "text_color", "border_color", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity", "alarm_entity"]
+    ["name", "brand", "gold", "background", "text_color", "border_color", "soc_entity", "power_entity", "state_entity", "floor_entity", "mode_entity", "days_entity", "stored_entity", "history_entity", "alarm_entity", "bypass_entity", "bypass_label"]
       .forEach(k => put(k, d[k]));
     ["capacity_kwh", "history_hours", "threshold"].forEach(k => put(k, has(d[k]) ? Number(d[k]) : undefined));
     if (d.palette === "green") out.palette = "green"; else delete out.palette;
     if (d.green_style === "fluo" || d.green_style === "normal") out.green_style = d.green_style; else delete out.green_style;
     delete out.show_ring;   // option supprimée en 2.0 : l'éditeur la retire des anciennes configurations
     if (d.show_temps) out.show_temps = true; else delete out.show_temps;
+    if (d.bypass_hide_idle) out.bypass_hide_idle = true; else delete out.bypass_hide_idle;
     if (d.show_eta === false) out.show_eta = false; else delete out.show_eta;
     if (d.eta_hide_idle === false) out.eta_hide_idle = false; else delete out.eta_hide_idle;
     if (d.show_label === false) out.show_label = false; else delete out.show_label;
@@ -938,7 +956,7 @@ class TitanStatusCardEditor extends HTMLElement {
         tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
-        tscEnt("tp0_entity", "sensor"), tscEnt("alarm_entity", "sensor"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
+        tscEnt("tp0_entity", "sensor"), tscEnt("alarm_entity", "sensor"), tscEnt("bypass_entity", "sensor"), tscTxt("bypass_label"), tscBool("bypass_hide_idle"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
         tscEnt("mode_entity"), tscEnt("days_entity"), tscEnt("stored_entity"), tscEnt("history_entity")] },
       { type: "expandable", name: "", title: "Boutons de commande (LED, Off-grid…)", icon: "mdi:toggle-switch", schema: [
         { name: "controls_position", selector: { select: { mode: "dropdown", options: [{ value: "top", label: "Dans l'en-tête" }, { value: "bottom", label: "Sous la carte" }] } } },
@@ -982,6 +1000,7 @@ class TitanStatusCardEditor extends HTMLElement {
           fill("floor_entity", TSC_FLOOR);
           fill("tp0_entity", "sensor." + m[1] + "temperature");
           fill("alarm_entity", "sensor." + m[1] + "alarm");
+          fill("bypass_entity", "sensor." + m[1] + "bypass_power");
           for (let i = 0; i < TSC_N.pv; i++) fill("pv" + i + "_entity", "sensor." + m[1] + "dc_input_power_" + (i + 1));
         }
         for (let i = 0; i < TSC_N.link; i++) {
