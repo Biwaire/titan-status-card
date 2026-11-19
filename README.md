@@ -91,6 +91,7 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `temps` + `show_temps` | Pastilles de température (jusqu'à 4). Dans l'éditeur : champ « Température Titan » en haut de la section Entités |
 | `capacity_kwh` | Capacité totale en kWh, utilisée pour calculer l'énergie stockée à partir du pourcentage. Défaut : 2,01 (une Titan seule). Voir « Capacité selon l'installation » |
 | `bypass_entity`, `bypass_label`, `bypass_hide_idle`, `bypass_switch` | Puissance de la prise de secours (off-grid), ex. `sensor.izypower_titan_titan_bypass_power`. Pastille « BACKUP 408 W » en bas à droite (`bypass_label` change le texte). Elle **n'apparaît que lorsque l'off-grid est activé** : l'interrupteur est repris automatiquement de `controls` (entité contenant `off_grid`), ou donné avec `bypass_switch`. `bypass_hide_idle: true` la masque en plus quand rien n'est branché (1 W ou moins) |
+| `curve_smooth` | Courbe d'historique arrondie (défaut). `false` : segments droits, comme avant la 2.2.2 |
 | `footer` | Jusqu'à 4 compteurs libres (`label`, `entity`, `unit`, `decimals`), par exemple l'énergie totale du cluster en kWh |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
 | `link_compact` | `true` : tous les blocs Link sont compacts (environ 3 fois moins hauts). Désactivé par défaut. Pour un seul bloc, ajouter `compact: true` dans ce `link` |
@@ -201,6 +202,10 @@ La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity
 | Titan + 2 grandes Link (4,032) | 10,074 |
 
 Autre combinaison : 2,01 pour la Titan, plus 2,01 par petite Link et 4,032 par grande Link.
+
+## Version 2.2.2
+
+- La courbe d'historique est maintenant **arrondie** (léger lissage puis interpolation sans dépassement des valeurs réelles). `curve_smooth: false` rétablit les segments droits ; case « Courbe arrondie » dans l'éditeur.
 
 ## Version 2.2.1
 

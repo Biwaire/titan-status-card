@@ -54,6 +54,7 @@ class TitanStatusCard extends HTMLElement {
       bypass_entity: typeof config.bypass_entity === "string" ? config.bypass_entity : "",
       bypass_label: typeof config.bypass_label === "string" ? config.bypass_label : "BACKUP",
       bypass_hide_idle: config.bypass_hide_idle === true,
+      curve_smooth: config.curve_smooth !== false,   // courbe arrondie (défaut) ; false = segments droits
       // interrupteur off-grid : la pastille n'apparaît que s'il est activé (détecté dans controls, ou bypass_switch)
       bypass_switch: typeof config.bypass_switch === "string" ? config.bypass_switch
         : ((Array.isArray(config.controls) ? config.controls : []).find(o => o && /off_grid|offgrid/i.test(o.entity || "")) || {}).entity || "",
@@ -631,9 +632,34 @@ class TitanStatusCard extends HTMLElement {
     rows.forEach(r => { const i = Math.min(N - 1, Math.max(0, Math.floor((r.t - t0) / (t1 - t0) * N))); buckets[i].push(r.v); });
     const pts = []; let last = rows[0].v;
     buckets.forEach(b => { if (b.length) last = b.reduce((a, x) => a + x, 0) / b.length; pts.push(last); });
+    if (this._c.curve_smooth !== false) {            // léger lissage [1 2 1] (2 passes) avant l'interpolation : formes plus douces
+      for (let k = 0; k < 2; k++) {
+        const q = pts.slice();
+        for (let i = 0; i < pts.length; i++) pts[i] = ((q[i - 1] !== undefined ? q[i - 1] : q[i]) + 2 * q[i] + (q[i + 1] !== undefined ? q[i + 1] : q[i])) / 4;
+      }
+    }
     const lo = Math.min(...pts), hi = Math.max(...pts), span = hi - lo || 1;
     const xy = pts.map((v, i) => [i / (N - 1) * 300, 40 - (v - lo) / span * 34]);
-    const d = xy.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join(" ");
+    const f = n => n.toFixed(1);
+    let d;
+    if (this._c.curve_smooth === false || xy.length < 3) d = xy.map((q, i) => (i ? "L" : "M") + f(q[0]) + " " + f(q[1])).join(" ");
+    else {
+      // interpolation cubique monotone (Fritsch-Carlson) : arrondie, sans dépasser les valeurs réelles
+      const n = xy.length, dx = [], m = [], tg = new Array(n);
+      for (let i = 0; i < n - 1; i++) { dx[i] = xy[i + 1][0] - xy[i][0]; m[i] = (xy[i + 1][1] - xy[i][1]) / dx[i]; }
+      tg[0] = m[0]; tg[n - 1] = m[n - 2];
+      for (let i = 1; i < n - 1; i++) tg[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+      for (let i = 0; i < n - 1; i++) {
+        if (m[i] === 0) { tg[i] = 0; tg[i + 1] = 0; continue; }
+        const a = tg[i] / m[i], b = tg[i + 1] / m[i], h = Math.hypot(a, b);
+        if (h > 3) { tg[i] = 3 * a / h * m[i]; tg[i + 1] = 3 * b / h * m[i]; }
+      }
+      d = "M" + f(xy[0][0]) + " " + f(xy[0][1]);
+      for (let i = 0; i < n - 1; i++) {
+        const k = dx[i] / 3;
+        d += " C" + f(xy[i][0] + k) + " " + f(xy[i][1] + tg[i] * k) + " " + f(xy[i + 1][0] - k) + " " + f(xy[i + 1][1] - tg[i + 1] * k) + " " + f(xy[i + 1][0]) + " " + f(xy[i + 1][1]);
+      }
+    }
     e.sl.setAttribute("d", d);
     e.sa.setAttribute("d", d + " L300 46 L0 46 Z");
   }
@@ -771,7 +797,7 @@ customElements.define("titan-link-card", TitanLinkCard);
 const TSC_N = { link: 5, controls: 6, slots: 4, pv: 4, temps: 1 };
 const TSC_LABELS = {
   name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", green_style: "Vert de la barre de charge et de la courbe", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
-  show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", show_pv: "Afficher les entrées PV (onduleurs)", pv_position: "Position des entrées PV", pv_dropdown: "Entrées PV en menu déroulant (flèche)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  curve_smooth: "Courbe arrondie (décocher pour des segments droits)", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", show_pv: "Afficher les entrées PV (onduleurs)", pv_position: "Position des entrées PV", pv_dropdown: "Entrées PV en menu déroulant (flèche)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
@@ -847,6 +873,7 @@ class TitanStatusCardEditor extends HTMLElement {
     for (let i = 0; i < TSC_N.pv; i++) d["pv" + i + "_entity"] = (Array.isArray(c.pv) && c.pv[i] || {}).entity;
     for (let i = 0; i < TSC_N.temps; i++) d["tp" + i + "_entity"] = (Array.isArray(c.temps) && c.temps[i] || {}).entity;
     d.bypass_hide_idle = c.bypass_hide_idle === true;
+    d.curve_smooth = c.curve_smooth !== false;
     d.link_palette = c.link_palette === "gold" || c.link_palette === "green" ? c.link_palette : "same";
     d.link_collapsible = c.link_collapsible !== false;
     d.link_show_bar = c.link_show_bar !== false;
@@ -865,6 +892,7 @@ class TitanStatusCardEditor extends HTMLElement {
     delete out.show_ring;   // option supprimée en 2.0 : l'éditeur la retire des anciennes configurations
     if (d.show_temps) out.show_temps = true; else delete out.show_temps;
     if (d.bypass_hide_idle) out.bypass_hide_idle = true; else delete out.bypass_hide_idle;
+    if (d.curve_smooth === false) out.curve_smooth = false; else delete out.curve_smooth;
     if (d.show_eta === false) out.show_eta = false; else delete out.show_eta;
     if (d.eta_hide_idle === false) out.eta_hide_idle = false; else delete out.eta_hide_idle;
     if (d.show_label === false) out.show_label = false; else delete out.show_label;
@@ -953,7 +981,7 @@ class TitanStatusCardEditor extends HTMLElement {
         tscTxt("name"), tscTxt("brand"), tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
         { name: "green_style", selector: { select: { mode: "dropdown", options: [{ value: "default", label: "Par défaut (vert normal)" }, { value: "normal", label: "Vert normal" }, { value: "fluo", label: "Vert fluo" }] } } },
-        tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), tscBool("curve_smooth"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
         tscEnt("tp0_entity", "sensor"), tscEnt("alarm_entity", "sensor"), tscEnt("bypass_entity", "sensor"), tscTxt("bypass_label"), tscBool("bypass_hide_idle"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
