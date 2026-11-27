@@ -93,6 +93,19 @@ class TitanStatusCard extends HTMLElement {
     return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
   }
 
+  /* clic sur une info → fenêtre détail/historique de Home Assistant (désactivable : more_info: false) */
+  _tapInfo(pairs) {
+    if (this._c.more_info === false) return;
+    pairs.forEach(([el, id]) => {
+      if (!el || !id || typeof id !== "string") return;
+      el.style.cursor = "pointer"; if (!el.title) el.title = "Historique";
+      el.addEventListener("click", ev => {
+        ev.stopPropagation();
+        this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: id } }));
+      });
+    });
+  }
+
   _build() {
     const c = this._c, dark = c.theme === "black", light = c.theme !== "auto" && !dark;
     const linksCfg = (Array.isArray(c.link) ? c.link : c.link ? [c.link] : []).filter(o => o && typeof o === "object");
@@ -319,6 +332,18 @@ class TitanStatusCard extends HTMLElement {
       const apply = () => { pvs.hidden = !open; pvd.classList.toggle("open", open); };
       apply();
       pvt.addEventListener("click", () => { open = !open; apply(); try { localStorage.setItem(key, open ? "1" : "0"); } catch (err) { /* ignore */ } });
+    }
+    {
+      const q = x => r.querySelector(x), qa = x => [...r.querySelectorAll(x)];
+      this._tapInfo([
+        [q(".soc"), c.soc_entity], [q(".kwh"), c.stored_entity || c.soc_entity],
+        [q(".mid"), c.state_entity || c.soc_entity], [q(".pw"), c.power_entity], [q(".eta"), c.power_entity || c.soc_entity],
+        [q(".mv") && q(".mv").parentNode, c.mode_entity], [q(".dv") && q(".dv").parentNode, c.days_entity],
+        [q(".chip.by"), c.bypass_entity],
+        ...qa(".tv").map(el => [el.parentNode, (c.temps[+el.dataset.i] || {}).entity]),
+        ...qa(".pvc").map((el, i) => [el, (c.pv[i] || {}).entity]),
+        ...qa(".fo").map((el, i) => [el, (c.footer[i] || {}).entity]),
+      ]);
     }
     this._armed = -1;
     this._e.cb.forEach((b, i) => b.addEventListener("click", () => {
@@ -759,6 +784,11 @@ class TitanLinkCard extends TitanStatusCard {
     const r = this.shadowRoot;
     this._e = { card: r.querySelector("ha-card"), socv: r.querySelector(".socv"), tv: r.querySelector(".tv"),
       cv: r.querySelector(".cv"), iv: [...r.querySelectorAll(".iv")], fill: r.querySelector(".track i"), track: r.querySelector(".track") };
+    this._tapInfo([
+      [r.querySelector(".soc"), c.soc_entity], [r.querySelector(".tv") && r.querySelector(".tv").parentNode, c.temp_entity],
+      [r.querySelector(".cv") && r.querySelector(".cv").parentNode, c.cycles_entity], [r.querySelector(".track"), c.soc_entity],
+      ...[...r.querySelectorAll(".iv")].map(el => [el.parentNode, ((Array.isArray(c.infos) ? c.infos : [])[+el.dataset.i] || {}).entity]),
+    ]);
     if (this._hass) this._update();
   }
 
@@ -797,7 +827,7 @@ customElements.define("titan-link-card", TitanLinkCard);
 const TSC_N = { link: 5, controls: 6, slots: 4, pv: 4, temps: 1 };
 const TSC_LABELS = {
   name: "Nom", brand: "Texte en haut à droite (marque)", palette: "Style", green_style: "Vert de la barre de charge et de la courbe", gold: "Couleur d'accent (optionnel)", background: "Couleur de fond (optionnel)", text_color: "Couleur des textes (optionnel)", border_color: "Couleur des cadres (optionnel)",
-  curve_smooth: "Courbe arrondie (décocher pour des segments droits)", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", show_pv: "Afficher les entrées PV (onduleurs)", pv_position: "Position des entrées PV", pv_dropdown: "Entrées PV en menu déroulant (flèche)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
+  curve_smooth: "Courbe arrondie (décocher pour des segments droits)", more_info: "Historique au clic sur les infos (%, mode, température, puissance…)", show_eta: "Heure estimée (horloge en haut à gauche)", eta_hide_idle: "Masquer l'heure automatiquement en veille", show_label: "Texte vertical à gauche (VEILLE, CHARGE…)", link_compact: "Blocs Link compacts (plus petits)", show_pv: "Afficher les entrées PV (onduleurs)", pv_position: "Position des entrées PV", pv_dropdown: "Entrées PV en menu déroulant (flèche)", link_palette: "Style des blocs Link", link_collapsible: "Blocs Link repliables (flèche)", link_show_bar: "Barre de charge/décharge dans les blocs Link", show_bar: "Barre de charge/décharge", link_open: "Blocs Link ouverts au départ", show_temps: "Pastilles de température", power_charge_positive: "Puissance positive = charge",
   capacity_kwh: "Capacité (kWh)", history_hours: "Historique de la courbe (heures)", threshold: "Seuil de veille (W)",
   soc_entity: "SOC de la batterie (obligatoire)", power_entity: "Puissance", state_entity: "État (Charging, Static…)",
   floor_entity: "SOC minimum (plancher)", mode_entity: "Mode de travail", days_entity: "Jours depuis la dernière charge complète",
@@ -874,6 +904,7 @@ class TitanStatusCardEditor extends HTMLElement {
     for (let i = 0; i < TSC_N.temps; i++) d["tp" + i + "_entity"] = (Array.isArray(c.temps) && c.temps[i] || {}).entity;
     d.bypass_hide_idle = c.bypass_hide_idle === true;
     d.curve_smooth = c.curve_smooth !== false;
+    d.more_info = c.more_info !== false;
     d.link_palette = c.link_palette === "gold" || c.link_palette === "green" ? c.link_palette : "same";
     d.link_collapsible = c.link_collapsible !== false;
     d.link_show_bar = c.link_show_bar !== false;
@@ -893,6 +924,7 @@ class TitanStatusCardEditor extends HTMLElement {
     if (d.show_temps) out.show_temps = true; else delete out.show_temps;
     if (d.bypass_hide_idle) out.bypass_hide_idle = true; else delete out.bypass_hide_idle;
     if (d.curve_smooth === false) out.curve_smooth = false; else delete out.curve_smooth;
+    if (d.more_info === false) out.more_info = false; else delete out.more_info;
     if (d.show_eta === false) out.show_eta = false; else delete out.show_eta;
     if (d.eta_hide_idle === false) out.eta_hide_idle = false; else delete out.eta_hide_idle;
     if (d.show_label === false) out.show_label = false; else delete out.show_label;
@@ -981,7 +1013,7 @@ class TitanStatusCardEditor extends HTMLElement {
         tscTxt("name"), tscTxt("brand"), tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"),
         { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } },
         { name: "green_style", selector: { select: { mode: "dropdown", options: [{ value: "default", label: "Par défaut (vert normal)" }, { value: "normal", label: "Vert normal" }, { value: "fluo", label: "Vert fluo" }] } } },
-        tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), tscBool("curve_smooth"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
+        tscBool("show_eta"), tscBool("eta_hide_idle"), tscBool("show_label"), tscBool("curve_smooth"), tscBool("more_info"), { name: "link_palette", selector: { select: { mode: "dropdown", options: [{ value: "same", label: "Comme la carte" }, { value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, tscBool("link_compact"), tscBool("link_collapsible"), tscBool("link_show_bar"), tscBool("link_open"), tscBool("show_temps"), tscBool("power_charge_positive"),
         { type: "grid", name: "", schema: [tscNum("capacity_kwh", 0.01), tscNum("history_hours"), tscNum("threshold")] }] },
       { type: "expandable", name: "", title: "Entités", icon: "mdi:flash", expanded: true, schema: [
         tscEnt("tp0_entity", "sensor"), tscEnt("alarm_entity", "sensor"), tscEnt("bypass_entity", "sensor"), tscTxt("bypass_label"), tscBool("bypass_hide_idle"), tscEnt("soc_entity"), tscEnt("power_entity"), tscEnt("state_entity"), tscEnt("floor_entity"),
@@ -1050,7 +1082,7 @@ class TitanStatusCardEditor extends HTMLElement {
 }
 
 class TitanLinkCardEditor extends TitanStatusCardEditor {
-  _flatten(c) { return { ...c, compact: c.compact === true, show_bar: c.show_bar !== false, palette: c.palette === "green" ? "green" : "gold", green_style: c.green_style === "fluo" || c.green_style === "normal" ? c.green_style : "default" }; }
+  _flatten(c) { return { ...c, compact: c.compact === true, show_bar: c.show_bar !== false, more_info: c.more_info !== false, palette: c.palette === "green" ? "green" : "gold", green_style: c.green_style === "fluo" || c.green_style === "normal" ? c.green_style : "default" }; }
   _unflatten(d, base) {
     const out = { ...base };
     ["name", "brand", "soc_entity", "temp_entity", "cycles_entity"].forEach(k => { if (d[k] !== undefined && d[k] !== null && d[k] !== "") out[k] = d[k]; else delete out[k]; });
@@ -1059,9 +1091,10 @@ class TitanLinkCardEditor extends TitanStatusCardEditor {
     ["background", "text_color", "border_color"].forEach(k => { if (d[k]) out[k] = d[k]; else delete out[k]; });
     if (d.compact === true) out.compact = true; else delete out.compact;
     if (d.show_bar === false) out.show_bar = false; else delete out.show_bar;
+    if (d.more_info === false) out.more_info = false; else delete out.more_info;
     return out;
   }
-  _schema() { return [tscTxt("name"), tscTxt("brand"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity"), { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, { name: "green_style", selector: { select: { mode: "dropdown", options: [{ value: "default", label: "Par défaut (vert normal)" }, { value: "normal", label: "Vert normal" }, { value: "fluo", label: "Vert fluo" }] } } }, tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"), tscBool("compact"), tscBool("show_bar")]; }
+  _schema() { return [tscTxt("name"), tscTxt("brand"), tscEnt("soc_entity"), tscEnt("temp_entity"), tscEnt("cycles_entity"), { name: "palette", selector: { select: { mode: "dropdown", options: [{ value: "gold", label: "Blanc et doré" }, { value: "green", label: "Noir et vert" }] } } }, { name: "green_style", selector: { select: { mode: "dropdown", options: [{ value: "default", label: "Par défaut (vert normal)" }, { value: "normal", label: "Vert normal" }, { value: "fluo", label: "Vert fluo" }] } } }, tscTxt("background"), tscTxt("text_color"), tscTxt("border_color"), tscBool("compact"), tscBool("show_bar"), tscBool("more_info")]; }
 }
 TSC_LABELS.compact = "Affichage compact (bloc plus petit)"; TSC_LABELS.temp_entity = "Température"; TSC_LABELS.cycles_entity = "Cycles";
 

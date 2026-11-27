@@ -91,6 +91,7 @@ La carte se configure aussi **sans YAML** : ajoute-la depuis le sélecteur de ca
 | `temps` + `show_temps` | Pastilles de température (jusqu'à 4). Dans l'éditeur : champ « Température Titan » en haut de la section Entités |
 | `capacity_kwh` | Capacité totale en kWh, utilisée pour calculer l'énergie stockée à partir du pourcentage. Défaut : 2,01 (une Titan seule). Voir « Capacité selon l'installation » |
 | `bypass_entity`, `bypass_label`, `bypass_hide_idle`, `bypass_switch` | Puissance de la prise de secours (off-grid), ex. `sensor.izypower_titan_titan_bypass_power`. Pastille « BACKUP 408 W » en bas à droite (`bypass_label` change le texte). Elle **n'apparaît que lorsque l'off-grid est activé** : l'interrupteur est repris automatiquement de `controls` (entité contenant `off_grid`), ou donné avec `bypass_switch`. `bypass_hide_idle: true` la masque en plus quand rien n'est branché (1 W ou moins) |
+| `more_info` | Clic sur une info (%, kWh, état, puissance, mode, températures, PV, compteurs, Link) → fenêtre détail avec l'historique de l'entité (défaut). `false` : désactivé (aussi dans l'éditeur visuel) |
 | `curve_smooth` | Courbe d'historique arrondie (défaut). `false` : segments droits, comme avant la 2.2.2 |
 | `footer` | Jusqu'à 4 compteurs libres (`label`, `entity`, `unit`, `decimals`), par exemple l'énergie totale du cluster en kWh |
 | `link` | Module Link repliable (`soc_entity`, `temp_entity`, `cycles_entity`, `infos`) |
@@ -202,6 +203,9 @@ La carte `custom:titan-link-card` existe aussi seule (mêmes options `soc_entity
 | Titan + 2 grandes Link (4,032) | 10,074 |
 
 Autre combinaison : 2,01 pour la Titan, plus 2,01 par petite Link et 4,032 par grande Link.
+
+## Version 2.3.0
+- Toutes les infos de la carte sont cliquables : un appui ouvre la fenêtre détail de Home Assistant avec l'historique (%, énergie, état, puissance, mode, températures, entrées PV, compteurs du bas, et aussi la carte Link). Désactivable dans l'éditeur visuel (case « Historique au clic ») ou avec `more_info: false`.
 
 ## Version 2.2.2
 
